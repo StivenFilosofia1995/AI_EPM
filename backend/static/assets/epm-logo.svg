@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 60" role="img" aria-label="Fundación Grupo EPM">
+  <defs>
+    <!-- Green arc / swoosh on top-right, echoing the real brand mark -->
+    <clipPath id="arcClip">
+      <rect x="0" y="0" width="220" height="60"/>
+    </clipPath>
+  </defs>
+
+  <!-- Decorative green arc (top-right corner, like the real mark) -->
+  <circle cx="210" cy="-10" r="42" fill="none"
+    stroke="#4DB848" stroke-width="9" clip-path="url(#arcClip)" opacity="0.85"/>
+
+  <!-- Line 1: "Fundación" — light gray for dark bg -->
+  <text
+    x="8" y="28"
+    font-family="'Helvetica Neue', Helvetica, Arial, sans-serif"
+    font-weight="400"
+    font-size="19"
+    letter-spacing="0.2"
+    fill="#C8C9CC"
+  >Fundación</text>
+
+  <!-- Line 2: "Grupo" — light gray -->
+  <text
+    x="8" y="52"
+    font-family="'Helvetica Neue', Helvetica, Arial, sans-serif"
+    font-weight="400"
+    font-size="19"
+    letter-spacing="0.2"
+    fill="#C8C9CC"
+  >Grupo</text>
+
+  <!-- Bullet dot -->
+  <circle cx="90" cy="46" r="2.6" fill="#C8C9CC"/>
+
+  <!-- "epm" — green, bold, slightly larger, custom letter-spacing -->
+  <text
+    x="97" y="52"
+    font-family="'Helvetica Neue', Helvetica, Arial, sans-serif"
+    font-weight="700"
+    font-size="20"
+    letter-spacing="-0.5"
+    fill="#4DB848"
+  >epm</text>
+</svg>
