@@ -186,6 +186,27 @@ def _build_html(
 
 # ── Send (blocking, runs in thread) ─────────────────────────────────────────
 
+def _build_mime(to_email: str, form_data: dict, facilitador: str,
+                sheets_url: str, sheets_row: int) -> MIMEMultipart:
+    nombre_actividad = (
+        form_data.get("nombre") or form_data.get("id_actividad") or "Actividad EPM"
+    )
+    html_body = _build_html(form_data, facilitador, sheets_url, sheets_row)
+    plain = (
+        f"Hola {facilitador},\n\n"
+        f"La actividad '{nombre_actividad}' fue guardada en la fila {sheets_row}.\n"
+        f"Ver en Sheets: {sheets_url}\n\n"
+        "— Asistente IA Fundación Grupo EPM"
+    )
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = f"Consolidación EPM — {nombre_actividad}"
+    msg["From"] = f"Asistente EPM <{settings.SMTP_USER}>"
+    msg["To"] = to_email
+    msg.attach(MIMEText(plain, "plain", "utf-8"))
+    msg.attach(MIMEText(html_body, "html", "utf-8"))
+    return msg
+
+
 def _send_sync(
     to_email: str,
     form_data: dict,
@@ -196,31 +217,35 @@ def _send_sync(
     nombre_actividad = (
         form_data.get("nombre") or form_data.get("id_actividad") or "Actividad EPM"
     )
+    msg = _build_mime(to_email, form_data, facilitador, sheets_url, sheets_row)
 
-    html_body = _build_html(form_data, facilitador, sheets_url, sheets_row)
+    last_exc: Exception | None = None
 
-    msg = MIMEMultipart("alternative")
-    msg["Subject"] = f"✅ Consolidación EPM — {nombre_actividad}"
-    msg["From"] = f"Asistente EPM <{settings.SMTP_USER}>"
-    msg["To"] = to_email
+    # Try STARTTLS (port 587) first, then SSL (port 465) as fallback
+    try:
+        with smtplib.SMTP(settings.SMTP_HOST, 587, timeout=25) as server:
+            server.ehlo()
+            server.starttls()
+            server.ehlo()
+            server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
+            server.sendmail(settings.SMTP_USER, to_email, msg.as_string())
+        logger.info("Email enviado (STARTTLS) a %s (actividad=%s)", to_email, nombre_actividad)
+        return
+    except Exception as exc:
+        last_exc = exc
+        logger.warning("STARTTLS falló (%s), intentando SSL 465…", exc)
 
-    # Plain-text fallback
-    plain = (
-        f"Hola {facilitador},\n\n"
-        f"La actividad '{nombre_actividad}' fue guardada en la fila {sheets_row}.\n"
-        f"Ver en Sheets: {sheets_url}\n\n"
-        "— Asistente IA Fundación Grupo EPM"
-    )
-    msg.attach(MIMEText(plain, "plain", "utf-8"))
-    msg.attach(MIMEText(html_body, "html", "utf-8"))
+    try:
+        with smtplib.SMTP_SSL(settings.SMTP_HOST, 465, timeout=25) as server:
+            server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
+            server.sendmail(settings.SMTP_USER, to_email, msg.as_string())
+        logger.info("Email enviado (SSL) a %s (actividad=%s)", to_email, nombre_actividad)
+        return
+    except Exception as exc:
+        last_exc = exc
+        logger.error("SSL también falló: %s", exc)
 
-    with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=20) as server:
-        server.ehlo()
-        server.starttls()
-        server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
-        server.sendmail(settings.SMTP_USER, to_email, msg.as_string())
-
-    logger.info("Email enviado a %s (actividad=%s)", to_email, nombre_actividad)
+    raise RuntimeError(f"No se pudo enviar el correo: {last_exc}")
 
 
 async def send_consolidation_email(
