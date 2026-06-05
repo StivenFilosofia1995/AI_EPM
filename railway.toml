@@ -4,7 +4,6 @@
 [build]
 builder = "DOCKERFILE"
 dockerfilePath = "Dockerfile"
-buildContext = "."
 
 [deploy]
 healthcheckPath = "/api/health"
