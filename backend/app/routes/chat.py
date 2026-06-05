@@ -214,17 +214,48 @@ async def admin_data(pin: str = Query(...)):
     _check_pin(pin)
     sessions = await supabase_service.get_all_sessions(500)
     actividades = await supabase_service.load_actividades(500)
-    activ_map = {a["session_id"]: a for a in actividades}
-    enriched = [
-        {**s, "actividad": activ_map.get(s["session_id"])}
+
+    # Build session→user map from sessions table
+    session_user: dict = {
+        s["session_id"]: (s.get("user_name") or "Sin nombre")
         for s in sessions
-    ]
+    }
+
+    # Enrich actividades with user_name (fallback to responsable field)
+    for a in actividades:
+        sid = a.get("session_id", "")
+        if sid not in session_user:
+            # session row missing — use responsable field or "Sin nombre"
+            session_user[sid] = a.get("responsable") or "Sin nombre"
+        a["_user_name"] = session_user[sid]
+
+    # Build users map: name → list of session dicts
+    activ_map = {a["session_id"]: a for a in actividades}
     users: dict = {}
-    for s in enriched:
+
+    # From sessions table
+    for s in sessions:
+        sid = s["session_id"]
         name = s.get("user_name") or "Sin nombre"
-        users.setdefault(name, []).append(s)
+        users.setdefault(name, []).append({**s, "actividad": activ_map.get(sid)})
+
+    # From actividades without matching session row
+    seen_sids = {s["session_id"] for s in sessions}
+    for a in actividades:
+        sid = a.get("session_id", "")
+        if sid not in seen_sids:
+            name = a.get("responsable") or "Sin nombre"
+            synthetic = {
+                "session_id": sid,
+                "user_name": name,
+                "created_at": a.get("created_at"),
+                "actividad": a,
+            }
+            users.setdefault(name, []).append(synthetic)
+            seen_sids.add(sid)
+
     return {
-        "total_sessions": len(sessions),
+        "total_sessions": len(seen_sids),
         "total_actividades": len(actividades),
         "total_users": len(users),
         "users": users,

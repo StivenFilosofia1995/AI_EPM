@@ -26,18 +26,35 @@ async def ensure_session(session_id: str, user_name: str = "") -> None:
     """Create or update session record. Saves user_name when provided."""
     if not settings.USE_SUPABASE_MEMORY:
         return
+    client = _get_client()
+
+    # Try with user_name first; if column doesn't exist yet, retry without it
+    record: dict = {"session_id": session_id}
+    if user_name:
+        record["user_name"] = user_name
     try:
-        client = _get_client()
-        record: dict = {"session_id": session_id}
-        if user_name:
-            record["user_name"] = user_name
         await asyncio.to_thread(
             lambda: client.table("epm_sessions")
             .upsert(record, on_conflict="session_id")
             .execute()
         )
+        return
     except Exception as exc:
-        logger.warning("Supabase ensure_session: %s", exc)
+        if user_name and "user_name" in str(exc):
+            logger.warning("user_name column missing, retrying without it: %s", exc)
+        else:
+            logger.warning("Supabase ensure_session: %s", exc)
+            return
+
+    # Fallback: save only session_id (user_name column not yet migrated)
+    try:
+        await asyncio.to_thread(
+            lambda: client.table("epm_sessions")
+            .upsert({"session_id": session_id}, on_conflict="session_id")
+            .execute()
+        )
+    except Exception as exc2:
+        logger.warning("Supabase ensure_session fallback: %s", exc2)
 
 
 # ─── Messages ────────────────────────────────────────────────────────────────
@@ -116,12 +133,12 @@ async def load_actividades(limit: int = 100) -> list[dict]:
 # ─── Admin ────────────────────────────────────────────────────────────────────
 
 async def get_all_sessions(limit: int = 500) -> list[dict]:
-    """Return all sessions with user_name ordered by most recent."""
+    """Return all sessions ordered by most recent."""
     try:
         client = _get_client()
         result = await asyncio.to_thread(
             lambda: client.table("epm_sessions")
-            .select("session_id,user_name,created_at")
+            .select("*")
             .order("created_at", desc=True)
             .limit(limit)
             .execute()
