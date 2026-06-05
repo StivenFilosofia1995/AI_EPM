@@ -4,18 +4,10 @@ from typing import Optional
 
 class Settings(BaseSettings):
     # ── LLM ──────────────────────────────────────────────────────────────────
-    OLLAMA_BASE_URL: str = "http://localhost:11434/v1"
-    OLLAMA_MODEL: str = "qwen2.5:1.5b"
-
     ANTHROPIC_API_KEY: Optional[str] = None
     ANTHROPIC_MODEL: str = "claude-haiku-4-5-20251001"
     ANTHROPIC_BASE_URL: Optional[str] = None
 
-    GROQ_API_KEY: Optional[str] = None
-    GROQ_MODEL: str = "llama-3.3-70b-versatile"
-    GROQ_BASE_URL: str = "https://api.groq.com/openai/v1"
-
-    PRIMARY_ENGINE: str = "anthropic"
     TEMPERATURE: float = 0.4
     MAX_TOKENS: int = 1500
     MAX_HISTORY: int = 20
