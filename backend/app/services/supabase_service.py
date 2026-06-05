@@ -111,3 +111,57 @@ async def load_actividades(limit: int = 100) -> list[dict]:
     except Exception as exc:
         logger.warning("Supabase load_actividades: %s", exc)
         return []
+
+
+# ─── Admin ────────────────────────────────────────────────────────────────────
+
+async def get_all_sessions(limit: int = 500) -> list[dict]:
+    """Return all sessions with user_name ordered by most recent."""
+    try:
+        client = _get_client()
+        result = await asyncio.to_thread(
+            lambda: client.table("epm_sessions")
+            .select("session_id,user_name,created_at")
+            .order("created_at", desc=True)
+            .limit(limit)
+            .execute()
+        )
+        return result.data or []
+    except Exception as exc:
+        logger.warning("Supabase get_all_sessions: %s", exc)
+        return []
+
+
+async def get_session_messages_all(session_id: str) -> list[dict]:
+    """Return full message history for a session (admin use)."""
+    try:
+        client = _get_client()
+        result = await asyncio.to_thread(
+            lambda: client.table("epm_messages")
+            .select("role,content,created_at")
+            .eq("session_id", session_id)
+            .order("created_at", desc=False)
+            .execute()
+        )
+        return result.data or []
+    except Exception as exc:
+        logger.warning("Supabase get_session_messages_all: %s", exc)
+        return []
+
+
+async def get_actividad_by_session(session_id: str) -> dict:
+    """Return activity form data for a specific session."""
+    try:
+        client = _get_client()
+        result = await asyncio.to_thread(
+            lambda: client.table("epm_actividades")
+            .select("*")
+            .eq("session_id", session_id)
+            .limit(1)
+            .execute()
+        )
+        rows = result.data or []
+        return rows[0] if rows else {}
+    except Exception as exc:
+        logger.warning("Supabase get_actividad_by_session: %s", exc)
+        return {}

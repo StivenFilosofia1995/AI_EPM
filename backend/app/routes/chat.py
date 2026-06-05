@@ -1,7 +1,7 @@
 import uuid as _uuid
 
 from pydantic import BaseModel
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import Response, StreamingResponse
 
 from app.models.schemas import ChatMessage, ExcelDownloadRequest
@@ -198,4 +198,49 @@ async def email_send(body: EmailSendBody):
         )
 
     return {"ok": True, "to": body.to_email}
+
+
+# ── Admin / Trazabilidad ──────────────────────────────────────────────────────
+
+def _check_pin(pin: str) -> None:
+    from app.config import settings as _s
+    if pin != _s.ADMIN_PIN:
+        raise HTTPException(status_code=401, detail="PIN de administrador incorrecto.")
+
+
+@router.get("/admin/data")
+async def admin_data(pin: str = Query(...)):
+    """Return all sessions + actividades for the admin dashboard."""
+    _check_pin(pin)
+    sessions = await supabase_service.get_all_sessions(500)
+    actividades = await supabase_service.load_actividades(500)
+    activ_map = {a["session_id"]: a for a in actividades}
+    enriched = [
+        {**s, "actividad": activ_map.get(s["session_id"])}
+        for s in sessions
+    ]
+    users: dict = {}
+    for s in enriched:
+        name = s.get("user_name") or "Sin nombre"
+        users.setdefault(name, []).append(s)
+    return {
+        "total_sessions": len(sessions),
+        "total_actividades": len(actividades),
+        "total_users": len(users),
+        "users": users,
+        "actividades": actividades,
+    }
+
+
+@router.get("/admin/session/{session_id}")
+async def admin_session_detail(session_id: str, pin: str = Query(...)):
+    """Return full message history + actividad for one session."""
+    _check_pin(pin)
+    messages = await supabase_service.get_session_messages_all(session_id)
+    actividad = await supabase_service.get_actividad_by_session(session_id)
+    return {
+        "session_id": session_id,
+        "messages": messages,
+        "actividad": actividad,
+    }
 

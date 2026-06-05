@@ -46,7 +46,10 @@ if STATIC_DIR.exists():
     async def root():
         return FileResponse(STATIC_DIR / "index.html")
 
+    @app.get("/admin", response_class=FileResponse)
+    async def admin_page():
+        return FileResponse(STATIC_DIR / "admin.html")
+
     @app.get("/{full_path:path}", response_class=FileResponse)
     async def spa_fallback(full_path: str):
-        # Serve index.html for all non-API routes (SPA routing)
         return FileResponse(STATIC_DIR / "index.html")

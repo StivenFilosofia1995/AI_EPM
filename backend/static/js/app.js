@@ -30,6 +30,7 @@ const downloadBtn  = document.getElementById('btnDownload');
 const sheetsBtn    = document.getElementById('btnSheets');
 const newBtn       = document.getElementById('btnNew');
 const resetBtn     = document.getElementById('btnReset');
+const logoutBtn    = document.getElementById('btnLogout');
 const emailBtn     = document.getElementById('btnEmail');
 const sidebar      = document.getElementById('sidebar');
 const menuBtn      = document.getElementById('menuBtn');
@@ -470,6 +471,14 @@ async function newSession() {
   setTimeout(() => bootWelcome(), 200);
 }
 
+// ── Logout / switch user ──────────────────────────────────────────────────
+function logoutUser() {
+  if (!confirm(`¿Cerrar sesión de "${USER_NAME || 'este usuario'}"?\nPodrás iniciar sesión con otro nombre.`)) return;
+  localStorage.removeItem(SESSION_KEY);
+  localStorage.removeItem(USER_NAME_KEY);
+  location.reload();
+}
+
 // ── Email modal ────────────────────────────────────────────────────────────
 // State carried from the last successful sheets submit:
 let _lastSheetsUrl = '';
@@ -559,6 +568,7 @@ downloadBtn.addEventListener('click', downloadExcel);
 sheetsBtn.addEventListener('click',   submitToSheets);
 newBtn.addEventListener('click',      newSession);
 resetBtn?.addEventListener('click',   newSession);
+logoutBtn?.addEventListener('click',  logoutUser);
 emailBtn.addEventListener('click',    showEmailModal);
 
 // ── Name modal ─────────────────────────────────────────────────────────────

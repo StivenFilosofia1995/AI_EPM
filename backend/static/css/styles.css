@@ -514,6 +514,51 @@ body::after {
   background: rgba(255,255,255,0.05);
 }
 
+/* Logout / switch-user button */
+.logout-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(239,68,68,.08);
+  border: 1px solid rgba(239,68,68,.3);
+  color: #f87171;
+  font-size: 12px;
+  font-weight: 500;
+  border-radius: var(--radius-sm);
+  padding: 3px 10px;
+  cursor: pointer;
+  transition: all var(--transition);
+  white-space: nowrap;
+}
+.logout-btn:hover {
+  background: rgba(239,68,68,.18);
+  border-color: rgba(239,68,68,.5);
+  color: #fca5a5;
+}
+
+/* Admin link */
+.admin-link {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(0,102,179,.08);
+  border: 1px solid rgba(0,102,179,.3);
+  color: #60a5fa;
+  font-size: 12px;
+  font-weight: 500;
+  border-radius: var(--radius-sm);
+  padding: 3px 10px;
+  cursor: pointer;
+  text-decoration: none;
+  transition: all var(--transition);
+  white-space: nowrap;
+}
+.admin-link:hover {
+  background: rgba(0,102,179,.18);
+  border-color: rgba(0,102,179,.5);
+  color: #93c5fd;
+}
+
 /* Memory badge */
 .memory-badge {
   display: flex;
@@ -967,6 +1012,8 @@ body::after {
   .memory-badge { display: none; }
   .user-badge   { display: none; }
   .reset-btn    { display: none; }
+  .logout-btn   { display: none; }
+  .admin-link   { display: none; }
 }
 
 /* ── Overlay (mobile sidebar) ── */

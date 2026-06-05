@@ -40,6 +40,9 @@ class Settings(BaseSettings):
     SMTP_USER: Optional[str] = None
     SMTP_PASSWORD: Optional[str] = None
 
+    # ── Admin ─────────────────────────────────────────────────────────────────
+    ADMIN_PIN: str = "epm2024"
+
     # ── App ───────────────────────────────────────────────────────────────────
     APP_NAME: str = "EPM — Consolidación Metodológica"
     SECRET_KEY: str = "change-me-in-production"
