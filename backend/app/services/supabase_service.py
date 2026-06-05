@@ -22,15 +22,18 @@ def _get_client() -> Client:
 
 # ─── Sessions ────────────────────────────────────────────────────────────────
 
-async def ensure_session(session_id: str) -> None:
-    """Create session record if not exists (upsert)."""
+async def ensure_session(session_id: str, user_name: str = "") -> None:
+    """Create or update session record. Saves user_name when provided."""
     if not settings.USE_SUPABASE_MEMORY:
         return
     try:
         client = _get_client()
+        record: dict = {"session_id": session_id}
+        if user_name:
+            record["user_name"] = user_name
         await asyncio.to_thread(
             lambda: client.table("epm_sessions")
-            .upsert({"session_id": session_id}, on_conflict="session_id")
+            .upsert(record, on_conflict="session_id")
             .execute()
         )
     except Exception as exc:

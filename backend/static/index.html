@@ -118,10 +118,28 @@
 
         <div class="header-center">
           <span class="header-title">Consolidación Metodológica</span>
-          <span class="header-sub">Asistente IA · Qwen</span>
+          <span class="header-sub">Asistente IA · Claude</span>
         </div>
 
         <div class="header-right">
+          <!-- Usuario activo -->
+          <div class="user-badge" id="userBadge" title="Usuario activo">
+            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24"
+              fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+              <circle cx="12" cy="7" r="4"/>
+            </svg>
+            <span id="userText">—</span>
+          </div>
+          <!-- Resetear / Nueva actividad -->
+          <button class="reset-btn" id="btnReset" title="Nueva actividad">
+            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24"
+              fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="1 4 1 10 7 10"/>
+              <path d="M3.51 15a9 9 0 1 0 .49-4.5"/>
+            </svg>
+            Nueva actividad
+          </button>
           <div class="memory-badge" id="memoryBadge" title="Memoria Supabase">
             <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24"
               fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">

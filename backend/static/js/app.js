@@ -29,6 +29,7 @@ const statusTxtEl  = document.getElementById('statusText');
 const downloadBtn  = document.getElementById('btnDownload');
 const sheetsBtn    = document.getElementById('btnSheets');
 const newBtn       = document.getElementById('btnNew');
+const resetBtn     = document.getElementById('btnReset');
 const emailBtn     = document.getElementById('btnEmail');
 const sidebar      = document.getElementById('sidebar');
 const menuBtn      = document.getElementById('menuBtn');
@@ -36,6 +37,8 @@ const progressFill = document.getElementById('progressFill');
 const progressLbl  = document.getElementById('progressLabel');
 const memoryBadge  = document.getElementById('memoryBadge');
 const toastEl      = document.getElementById('toast');
+const userBadgeEl  = document.getElementById('userBadge');
+const userTextEl   = document.getElementById('userText');
 
 // ── Overlay (mobile) ───────────────────────────────────────────────────────
 const overlay = document.createElement('div');
@@ -102,6 +105,13 @@ function renderMarkdown(raw) {
   txt = txt.replace(/(<li>[\s\S]*?<\/li>\n?)+/g, m => `<ul>${m}</ul>`);
   txt = txt.replace(/\n\n/g, '</p><p>').replace(/\n/g, '<br>');
   return `<p>${txt}</p>`;
+}
+
+// ── User display ──────────────────────────────────────────────────────────
+function updateUserDisplay() {
+  if (!userTextEl || !USER_NAME) return;
+  userTextEl.textContent = USER_NAME;
+  userBadgeEl.classList.add('active');
 }
 
 // ── Status indicator ───────────────────────────────────────────────────────
@@ -431,15 +441,32 @@ async function submitToSheets() {
 
 // ── New session ────────────────────────────────────────────────────────────
 async function newSession() {
-  if (!confirm('¿Iniciar una nueva actividad? La sesión anterior no se perderá en Supabase.')) return;
-  SESSION_ID = generateUUID();
+  if (!confirm('¿Iniciar una nueva actividad? La sesión anterior quedará guardada en Supabase.')) return;
+
+  try {
+    const r = await fetch('/api/session/new', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ user_name: USER_NAME }),
+    });
+    if (r.ok) {
+      const data = await r.json();
+      SESSION_ID = data.session_id;
+    } else {
+      SESSION_ID = generateUUID();
+    }
+  } catch {
+    SESSION_ID = generateUUID();
+  }
+
   localStorage.setItem(SESSION_KEY, SESSION_ID);
   chatEl.innerHTML = '';
-  currentStep = 0;
+  currentStep  = 0;
   _finaleShown = false;
   progressFill.style.width = '0%';
   progressLbl.textContent  = '0 / 25';
   document.querySelectorAll('.step-item').forEach(el => el.classList.remove('done', 'active'));
+  showToast('Nueva actividad iniciada', 'success');
   setTimeout(() => bootWelcome(), 200);
 }
 
@@ -531,6 +558,7 @@ sendBtnEl.addEventListener('click',  sendMessage);
 downloadBtn.addEventListener('click', downloadExcel);
 sheetsBtn.addEventListener('click',   submitToSheets);
 newBtn.addEventListener('click',      newSession);
+resetBtn?.addEventListener('click',   newSession);
 emailBtn.addEventListener('click',    showEmailModal);
 
 // ── Name modal ─────────────────────────────────────────────────────────────
@@ -554,16 +582,31 @@ function showNameModal() {
     const submit = backdrop.querySelector('#nameSubmit');
     input.focus();
 
-    function confirm() {
+    async function doSubmitName() {
       const val = input.value.trim();
       if (!val) { input.focus(); return; }
+      submit.disabled = true;
+      submit.textContent = 'Iniciando…';
+      try {
+        const r = await fetch('/api/session/new', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ user_name: val }),
+        });
+        if (r.ok) {
+          const data = await r.json();
+          SESSION_ID = data.session_id;
+          localStorage.setItem(SESSION_KEY, SESSION_ID);
+        }
+      } catch { /* keep existing SESSION_ID */ }
       USER_NAME = val;
       localStorage.setItem(USER_NAME_KEY, val);
+      updateUserDisplay();
       backdrop.remove();
       resolve(val);
     }
-    submit.addEventListener('click', confirm);
-    input.addEventListener('keydown', e => { if (e.key === 'Enter') confirm(); });
+    submit.addEventListener('click', doSubmitName);
+    input.addEventListener('keydown', e => { if (e.key === 'Enter') doSubmitName(); });
   });
 }
 
@@ -589,9 +632,10 @@ function bootWelcome() {
 
 window.addEventListener('DOMContentLoaded', async () => {
   checkHealth();
-  // Ask name on first visit; skip if already stored
   if (!USER_NAME) {
     await showNameModal();
+  } else {
+    updateUserDisplay();
   }
   setTimeout(bootWelcome, 200);
 });

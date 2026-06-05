@@ -471,6 +471,49 @@ body::after {
   flex-shrink: 0;
 }
 
+/* User badge */
+.user-badge {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  color: var(--text-muted);
+  border: 1px solid var(--glass-border);
+  border-radius: 20px;
+  padding: 3px 10px;
+  max-width: 140px;
+  overflow: hidden;
+  transition: all 0.4s;
+}
+.user-badge span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.user-badge.active {
+  color: var(--green);
+  border-color: rgba(0, 166, 80, 0.45);
+  background: rgba(0, 166, 80, 0.12);
+}
+
+/* Reset button (header) */
+.reset-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  font-family: var(--font);
+  color: var(--text-dim);
+  background: none;
+  border: 1px solid var(--glass-border);
+  border-radius: 20px;
+  padding: 3px 10px;
+  cursor: pointer;
+  transition: all var(--transition);
+  white-space: nowrap;
+}
+.reset-btn:hover {
+  color: var(--text);
+  border-color: rgba(255,255,255,0.2);
+  background: rgba(255,255,255,0.05);
+}
+
 /* Memory badge */
 .memory-badge {
   display: flex;
@@ -922,6 +965,8 @@ body::after {
   .header { padding: 0 14px; }
   .message { max-width: 94%; }
   .memory-badge { display: none; }
+  .user-badge   { display: none; }
+  .reset-btn    { display: none; }
 }
 
 /* ── Overlay (mobile sidebar) ── */

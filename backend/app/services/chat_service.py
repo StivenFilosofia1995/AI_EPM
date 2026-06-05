@@ -71,7 +71,7 @@ def _get_session(session_id: str) -> dict:
     return _sessions[session_id]
 
 
-async def _ensure_loaded(session_id: str) -> bool:
+async def _ensure_loaded(session_id: str, user_name: str = "") -> bool:
     """
     Load conversation history from Supabase on first access.
     Returns True if history was restored (session existed).
@@ -80,7 +80,7 @@ async def _ensure_loaded(session_id: str) -> bool:
     if session["loaded"]:
         return False
 
-    await supabase_service.ensure_session(session_id)
+    await supabase_service.ensure_session(session_id, user_name=user_name)
     history = await supabase_service.load_history(session_id)
     session["messages"] = history
     session["loaded"] = True
@@ -103,7 +103,7 @@ async def process_message_stream(
     user_name: str | None = None,
 ) -> AsyncGenerator[str, None]:
     """Yield SSE chunks; persist every message to Supabase."""
-    restored = await _ensure_loaded(session_id)
+    restored = await _ensure_loaded(session_id, user_name=user_name or "")
     if restored:
         yield (
             f"data: {json.dumps({'meta': 'history_restored'}, ensure_ascii=False)}\n\n"

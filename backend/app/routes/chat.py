@@ -1,3 +1,5 @@
+import uuid as _uuid
+
 from pydantic import BaseModel
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import Response, StreamingResponse
@@ -15,6 +17,20 @@ from app.services.google_sheets_service import append_actividad, read_sheet_stru
 from app.services.email_service import send_consolidation_email
 
 router = APIRouter(prefix="/api", tags=["chat"])
+
+
+# ── Session management ───────────────────────────────────────────────────────
+
+class SessionNewBody(BaseModel):
+    user_name: str = ""
+
+
+@router.post("/session/new")
+async def session_new(body: SessionNewBody):
+    """Create a new session in Supabase with user_name."""
+    session_id = str(_uuid.uuid4())
+    await supabase_service.ensure_session(session_id, user_name=body.user_name)
+    return {"session_id": session_id, "user_name": body.user_name}
 
 
 # ── Chat ─────────────────────────────────────────────────────────────────────
