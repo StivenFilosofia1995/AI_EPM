@@ -2,7 +2,13 @@
 
 Esquema PostgreSQL del proyecto, en Supabase.
 
-## Cómo ejecutarlas
+## Camino rápido: un solo script
+
+Si vas a crear el esquema desde cero, pega **`esquema_completo.sql`** entero en el SQL Editor de Supabase y ejecútalo. Es la concatenación de todas las migraciones en orden, dentro de una transacción: si algo falla, no queda el esquema a medias.
+
+Ese archivo es **generado**. No lo edites a mano: cambia la migración correspondiente y regenera con `python sql/generar_esquema_completo.py`.
+
+## Camino por migraciones
 
 Abre **Supabase Dashboard → SQL Editor** y ejecuta los archivos de `migrations/` **en orden numérico estricto**. Cada uno pega completo en el editor y se corre de una vez.
 

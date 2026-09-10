@@ -1,0 +1,16 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "epm-backend",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "-m", "uvicorn", "app.main:app",
+        "--app-dir", "backend",
+        "--host", "127.0.0.1",
+        "--port", "8010"
+      ],
+      "port": 8010
+    }
+  ]
+}
