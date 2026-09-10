@@ -1,22 +1,19 @@
-# AVISO: este archivo NO es el que se aplica en el build.
+# Este es el .dockerignore vigente.
 #
-# Docker busca el .dockerignore en la raíz del CONTEXTO, y tanto
-# railway.toml como docker-compose.yml usan `backend` como contexto.
-# El archivo vigente es backend/.dockerignore.
-#
-# Este se conserva por si alguna vez se construye desde la raíz.
+# El contexto de build es la RAÍZ del repositorio, así que Docker busca este
+# archivo aquí y los patrones son relativos a la raíz.
 
-# Control de versiones
+# ─── Control de versiones ───────────────────────────────────────────────────
 .git/
 .gitignore
 .gitattributes
 
-# Credenciales y entorno — nunca deben entrar a la imagen
+# ─── Credenciales y entorno — nunca deben entrar a la imagen ────────────────
 .env
 *.env
-!.env.example
-service_account.json
+!backend/.env.example
 backend/service_account.json
+service_account.json
 *-service-account.json
 credentials.json
 client_secret*.json
@@ -24,12 +21,12 @@ client_secret*.json
 *.key
 *.p12
 
-# Python
-__pycache__/
-*.py[cod]
-*.pyo
-*.pyd
-*.egg-info/
+# ─── Python ─────────────────────────────────────────────────────────────────
+**/__pycache__/
+**/*.py[cod]
+**/*.pyo
+**/*.pyd
+**/*.egg-info/
 .eggs/
 dist/
 build/
@@ -42,26 +39,34 @@ env/
 .coverage
 htmlcov/
 
-# Pruebas y herramientas de desarrollo (no se ejecutan en la imagen)
+# ─── Pruebas y herramientas de desarrollo ───────────────────────────────────
+# No se ejecutan dentro de la imagen.
 backend/tests/
-requirements-dev.txt
+backend/requirements-dev.txt
+backend/pytest.ini
+backend/pyproject.toml
 .github/
 
-# Documentación y artefactos locales
-docs/
-*.md
-!README.md
+# ─── SQL ────────────────────────────────────────────────────────────────────
+# Las migraciones se ejecutan en Supabase, no en el contenedor.
+backend/sql/
+
+# ─── Datos y artefactos locales ─────────────────────────────────────────────
+backend/datos_demo.json
 *.xlsx
 *.log
 uploads/
 
-# IDE y sistema operativo
+# ─── Documentación ──────────────────────────────────────────────────────────
+docs/
+*.md
+
+# ─── IDE, sistema operativo y orquestación local ────────────────────────────
 .vscode/
 .idea/
+.claude/
 *.swp
 *.swo
 .DS_Store
 Thumbs.db
-
-# Orquestación local
 docker-compose.yml

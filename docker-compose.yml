@@ -8,8 +8,10 @@
 services:
   backend:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      # Mismo contexto que Railway: la raíz del repositorio. Si difiere, el
+      # Dockerfile funciona en un sitio y falla en el otro.
+      context: .
+      dockerfile: backend/Dockerfile
     ports:
       - "8000:8000"
     env_file:

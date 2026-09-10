@@ -1,7 +1,16 @@
+# El contexto de build es la RAÍZ del repositorio, no backend/.
+#
+# Por eso todas las rutas de COPY llevan el prefijo `backend/`. Railway no
+# aplica el `buildContext` de railway.toml en su builder, así que se eliminó
+# esa opción y el contexto quedó explícitamente en la raíz. docker-compose.yml
+# usa el mismo contexto, para que local y despliegue se comporten igual.
+#
+# Si algún día se cambia el contexto a backend/, hay que quitar el prefijo de
+# todas las líneas COPY y mover .dockerignore a backend/.
+
 FROM python:3.11-slim
 
-# No escribir .pyc y no almacenar la salida en búfer: los registros de Railway
-# aparecen en el momento, no en bloques.
+# Sin .pyc y sin búfer: los registros de Railway aparecen en el momento.
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
@@ -9,16 +18,15 @@ WORKDIR /app
 
 # Las dependencias van en su propia capa: solo se reinstalan cuando cambia
 # requirements.txt, no en cada cambio de código.
-COPY requirements.txt .
+COPY backend/requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir -r requirements.txt
 
-# Se copia el contexto completo en lugar de directorio por directorio.
-# Con COPY app/ ./app/ y COPY static/ ./static/, si un directorio no llegaba al
-# contexto el build fallaba con "failed to compute cache key: not found", que
-# es un mensaje que no dice cuál es el problema real. Lo que NO debe entrar a
-# la imagen está declarado en backend/.dockerignore.
-COPY . .
+# Se copia todo backend/ de una vez. Copiar directorio por directorio hacía
+# que la ausencia de uno fallara con "failed to compute cache key: not found",
+# un mensaje que no dice cuál es el problema real. Lo que no debe entrar a la
+# imagen está declarado en el .dockerignore de la raíz.
+COPY backend/ .
 
 EXPOSE 8000
 
