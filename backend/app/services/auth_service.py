@@ -133,7 +133,8 @@ async def list_users(limit: int = 500) -> list[dict]:
     result = await _run(
         lambda: client.table(USERS)
         .select("id,email,nombre,programa,rol,activo,debe_cambiar_password,"
-                "ultimo_acceso,created_at")
+                "ultimo_acceso,created_at,cargo,telefono,lineas_accion,temas,"
+                "auto_registrado")
         .order("nombre", desc=False)
         .limit(limit)
         .execute()
@@ -148,6 +149,9 @@ async def create_user(
     rol: str = "facilitador",
     programa: str | None = None,
     creado_por: str | None = None,
+    perfil: dict | None = None,
+    auto_registrado: bool = False,
+    debe_cambiar_password: bool = True,
 ) -> dict:
     if rol not in ROLES:
         raise AuthError(f"Rol inválido: {rol}. Debe ser uno de {ROLES}.")
@@ -168,8 +172,11 @@ async def create_user(
         "rol": rol,
         "programa": programa,
         "activo": True,
-        "debe_cambiar_password": True,
+        # Quien se registra solo elige su contraseña: no hay nada que cambiar.
+        "debe_cambiar_password": debe_cambiar_password,
         "creado_por": creado_por,
+        "auto_registrado": auto_registrado,
+        **(perfil or {}),
     }
     result = await _run(lambda: client.table(USERS).insert(record).execute())
     rows = result.data or []
@@ -263,3 +270,82 @@ async def set_activo(user_id: str, activo: bool) -> None:
     await _run(
         lambda: client.table(USERS).update({"activo": activo}).eq("id", user_id).execute()
     )
+
+
+# ─── Registro abierto ───────────────────────────────────────────────────────
+
+
+async def registrar_usuario(
+    email: str,
+    nombre: str,
+    password: str,
+    cargo: str,
+    programa: str | None = None,
+    lineas_accion: list[str] | None = None,
+    temas: str | None = None,
+    telefono: str | None = None,
+) -> dict:
+    """
+    Alta por iniciativa de la propia persona.
+
+    SALVAGUARDA: el rol es SIEMPRE 'facilitador' y no se toma del formulario.
+    Si se aceptara del cliente, cualquiera se haría administrador desde la
+    pantalla de registro. Subir de rol solo puede hacerlo un administrador
+    desde el panel.
+    """
+    from app.domain.fields import LINEAS_ACCION, PROGRAMAS
+
+    if programa and programa not in PROGRAMAS:
+        raise AuthError(f"Programa no válido: {programa}.")
+
+    lineas = [x for x in (lineas_accion or []) if x]
+    invalidas = [x for x in lineas if x not in LINEAS_ACCION]
+    if invalidas:
+        raise AuthError(f"Líneas de acción no válidas: {', '.join(invalidas)}.")
+
+    if len(cargo.strip()) < 3:
+        raise AuthError("Indica a qué te dedicas, con al menos 3 caracteres.")
+
+    return await create_user(
+        email=email,
+        nombre=nombre,
+        password=password,
+        rol="facilitador",          # nunca se toma del formulario
+        programa=programa,
+        perfil={
+            "cargo": cargo.strip(),
+            "lineas_accion": lineas,
+            "temas": (temas or "").strip() or None,
+            "telefono": (telefono or "").strip() or None,
+            "registrado_at": datetime.now(UTC).isoformat(),
+        },
+        auto_registrado=True,
+        debe_cambiar_password=False,
+    )
+
+
+async def actualizar_perfil(user_id: str, perfil: dict) -> dict:
+    """Actualiza los campos de perfil. Nunca toca rol, activo ni contraseña."""
+    from app.domain.fields import LINEAS_ACCION, PROGRAMAS
+
+    permitidos = {"nombre", "cargo", "programa", "lineas_accion", "temas", "telefono"}
+    cambios = {k: v for k, v in perfil.items() if k in permitidos}
+
+    if cambios.get("programa") and cambios["programa"] not in PROGRAMAS:
+        raise AuthError(f"Programa no válido: {cambios['programa']}.")
+
+    lineas = cambios.get("lineas_accion")
+    if lineas is not None:
+        invalidas = [x for x in lineas if x not in LINEAS_ACCION]
+        if invalidas:
+            raise AuthError(f"Líneas de acción no válidas: {', '.join(invalidas)}.")
+
+    if not cambios:
+        raise AuthError("No hay nada que actualizar.")
+
+    client = get_client()
+    result = await _run(
+        lambda: client.table(USERS).update(cambios).eq("id", user_id).execute()
+    )
+    filas = result.data or []
+    return filas[0] if filas else {}

@@ -92,37 +92,76 @@ async def verify_session_ownership(session_id: str, user: dict) -> dict:
 # Implementación en memoria del proceso. Con varias réplicas el límite es por
 # réplica, no global. Es una limitación conocida y documentada: para un límite
 # realmente global haría falta Redis o una tabla de contadores en Postgres.
+#
+# Los limitadores son FUNCIONES, no instancias de clase. FastAPI resuelve las
+# anotaciones de tipo con `__globals__` de lo que recibe; una instancia no
+# tiene ese atributo, así que con `from __future__ import annotations` la
+# anotación `Request` se queda como texto sin resolver y FastAPI la trata como
+# un campo obligatorio del cuerpo. El síntoma era un 422 "field required" en
+# el parámetro `request` de toda ruta limitada.
 
 _buckets: dict[str, list[float]] = defaultdict(list)
 
 
-class RateLimit:
-    def __init__(self, veces: int, por_segundos: int, nombre: str = "recurso"):
-        self.veces = veces
-        self.por_segundos = por_segundos
-        self.nombre = nombre
+def _consumir(clave: str, veces: int, por_segundos: int) -> None:
+    ahora = time.monotonic()
+    ventana = _buckets[clave]
 
-    async def __call__(
-        self, request: Request, user: dict = Depends(get_current_user)
-    ) -> dict:
-        ahora = time.monotonic()
-        clave = f"{self.nombre}:{user['id']}"
-        ventana = _buckets[clave]
+    while ventana and ahora - ventana[0] > por_segundos:
+        ventana.pop(0)
 
-        while ventana and ahora - ventana[0] > self.por_segundos:
-            ventana.pop(0)
+    if len(ventana) >= veces:
+        espera = int(por_segundos - (ahora - ventana[0])) + 1
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"Demasiadas solicitudes. Intenta de nuevo en {espera} segundos.",
+            headers={"Retry-After": str(espera)},
+        )
 
-        if len(ventana) >= self.veces:
-            espera = int(self.por_segundos - (ahora - ventana[0])) + 1
-            raise HTTPException(
-                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail=f"Demasiadas solicitudes. Intenta de nuevo en {espera} segundos.",
-                headers={"Retry-After": str(espera)},
-            )
+    ventana.append(ahora)
 
-        ventana.append(ahora)
+
+def _ip_de(request: Request) -> str:
+    """Detrás del proxy de Railway, la IP real viene en la cabecera."""
+    reenviada = request.headers.get("x-forwarded-for")
+    if reenviada:
+        return reenviada.split(",")[0].strip()
+    return request.client.host if request.client else "desconocida"
+
+
+def limitador_por_usuario(veces: int, por_segundos: int, nombre: str):
+    """Límite por cuenta autenticada. Devuelve el usuario, como get_current_user."""
+
+    async def dependencia(user: dict = Depends(get_current_user)) -> dict:
+        _consumir(f"{nombre}:{user['id']}", veces, por_segundos)
         return user
 
+    dependencia.es_limitador = True
+    dependencia.nombre_limite = nombre
+    return dependencia
 
-limitar_modelo = RateLimit(veces=20, por_segundos=300, nombre="modelo")
-limitar_correo = RateLimit(veces=5, por_segundos=600, nombre="correo")
+
+def limitador_por_ip(veces: int, por_segundos: int, nombre: str):
+    """
+    Límite por dirección IP, para rutas sin autenticación.
+
+    El registro es público: sin esto, cualquiera podría crear cuentas en masa.
+    """
+
+    async def dependencia(request: Request) -> None:
+        _consumir(f"{nombre}:{_ip_de(request)}", veces, por_segundos)
+
+    dependencia.es_limitador = True
+    dependencia.nombre_limite = nombre
+    return dependencia
+
+
+limitar_modelo = limitador_por_usuario(veces=20, por_segundos=300, nombre="modelo")
+limitar_correo = limitador_por_usuario(veces=5, por_segundos=600, nombre="correo")
+limitar_registro = limitador_por_ip(veces=5, por_segundos=3600, nombre="registro")
+limitar_login = limitador_por_ip(veces=20, por_segundos=600, nombre="login")
+
+
+def es_limitador(call) -> bool:
+    """Para las pruebas: identifica una dependencia de límite de tasa."""
+    return bool(getattr(call, "es_limitador", False))

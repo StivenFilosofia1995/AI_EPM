@@ -155,12 +155,107 @@ $('#formCambio').addEventListener('submit', async (e) => {
   }
 });
 
+// ── Registro ─────────────────────────────────────────────────────────────
+let _opcionesRegistro = null;
+
+async function irARegistro() {
+  $('#pantallaAcceso').classList.add('oculto');
+  $('#pantallaRegistro').classList.remove('oculto');
+  $('#errorRegistro').classList.add('oculto');
+
+  if (!_opcionesRegistro) {
+    try {
+      _opcionesRegistro = await api('/api/auth/registro/opciones');
+    } catch {
+      _opcionesRegistro = { programas: [], lineas_accion: [] };
+    }
+    pintarOpcionesRegistro();
+  }
+  $('#rNombre').focus();
+}
+
+function pintarOpcionesRegistro() {
+  const sel = $('#rPrograma');
+  sel.replaceChildren(el('option', { value: '' }, 'Sin programa asignado'));
+  for (const p of _opcionesRegistro.programas) {
+    sel.appendChild(el('option', { value: p }, p));
+  }
+
+  const caja = $('#rLineas');
+  caja.replaceChildren();
+  _opcionesRegistro.lineas_accion.forEach((linea, i) => {
+    const id = `rLinea_${i}`;
+    caja.appendChild(el('label', { class: 'opcion', for: id },
+      el('input', { type: 'checkbox', id, value: linea, name: 'rLinea' }),
+      el('span', { class: 'opcion-texto' }, el('b', { text: linea }))));
+  });
+}
+
+function irAAcceso() {
+  $('#pantallaRegistro').classList.add('oculto');
+  $('#pantallaAcceso').classList.remove('oculto');
+  $('#errorAcceso').classList.add('oculto');
+  $('#email').focus();
+}
+
+$('#btnIrRegistro').addEventListener('click', irARegistro);
+$('#btnIrAcceso').addEventListener('click', irAAcceso);
+
+$('#formRegistro').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const err = $('#errorRegistro');
+  const btn = $('#btnRegistrar');
+  err.classList.add('oculto');
+
+  const pass = $('#rPass').value;
+  if (pass !== $('#rPass2').value) {
+    err.textContent = 'Las contraseñas no coinciden.';
+    err.classList.remove('oculto');
+    return;
+  }
+
+  const lineas = Array.from(document.querySelectorAll('input[name="rLinea"]:checked'))
+                      .map(i => i.value);
+
+  btn.disabled = true;
+  btn.textContent = 'Creando cuenta…';
+
+  try {
+    const datos = await api('/api/auth/registro', {
+      method: 'POST',
+      body: {
+        nombre: $('#rNombre').value.trim(),
+        email: $('#rEmail').value.trim(),
+        password: pass,
+        cargo: $('#rCargo').value.trim(),
+        programa: $('#rPrograma').value || null,
+        telefono: $('#rTelefono').value.trim() || null,
+        lineas_accion: lineas,
+        temas: $('#rTemas').value.trim() || null,
+      },
+    });
+    TOKEN = datos.access_token;
+    localStorage.setItem(TOKEN_KEY, TOKEN);
+    USUARIO = datos.user;
+    $('#pantallaRegistro').classList.add('oculto');
+    await iniciarApp();
+    mostrarAviso(`Cuenta creada. Bienvenido, ${USUARIO.nombre}.`, 'ok');
+  } catch (ex) {
+    err.textContent = ex.message;
+    err.classList.remove('oculto');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Crear cuenta y entrar';
+  }
+});
+
 function cerrarSesion(expirada = false) {
   localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(SESSION_KEY);
   TOKEN = ''; SESSION = ''; USUARIO = null;
   $('#app').classList.add('oculto');
   $('#pantallaCambio').classList.add('oculto');
+  $('#pantallaRegistro').classList.add('oculto');
   $('#pantallaAcceso').classList.remove('oculto');
   if (expirada) {
     const err = $('#errorAcceso');
@@ -180,6 +275,7 @@ async function iniciarApp() {
   $('#usuarioRol').textContent    = USUARIO.rol;
 
   $('#pantallaAcceso').classList.add('oculto');
+  $('#pantallaRegistro').classList.add('oculto');
   $('#app').classList.remove('oculto');
 
   if (SESSION) {

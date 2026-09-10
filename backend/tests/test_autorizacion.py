@@ -13,7 +13,7 @@ import pytest
 from fastapi.routing import APIRoute
 
 from app.dependencies import (
-    RateLimit,
+    es_limitador,
     get_current_user,
 )
 from app.main import app
@@ -22,6 +22,10 @@ from app.main import app
 PUBLICAS = {
     ("/api/health", "GET"),
     ("/api/auth/login", "POST"),
+    # El registro es abierto por decisión de producto. El rol resultante
+    # siempre es 'facilitador': lo fuerza auth_service, no el formulario.
+    ("/api/auth/registro", "POST"),
+    ("/api/auth/registro/opciones", "GET"),
     ("/api/docs", "GET"),
     ("/api/redoc", "GET"),
     ("/api/openapi.json", "GET"),
@@ -44,7 +48,7 @@ def _protege(ruta: APIRoute) -> bool:
         call = dep.call
         if call is get_current_user:
             return True
-        if isinstance(call, RateLimit):
+        if es_limitador(call):
             return True
         # require_role devuelve una closure con get_current_user dentro.
         for sub in dep.dependencies:
@@ -82,7 +86,7 @@ def test_las_rutas_que_llaman_al_modelo_estan_limitadas_por_tasa():
     for r, metodo in _rutas_api():
         if not r.path.startswith("/api/ideas"):
             continue
-        if not any(isinstance(d.call, RateLimit) for d in r.dependant.dependencies):
+        if not any(es_limitador(d.call) for d in r.dependant.dependencies):
             sin_limite.append(f"{metodo} {r.path}")
     assert not sin_limite, (
         "Estas rutas llaman al modelo sin límite de tasa: " + ", ".join(sorted(sin_limite))
@@ -91,7 +95,7 @@ def test_las_rutas_que_llaman_al_modelo_estan_limitadas_por_tasa():
 
 def test_el_envio_de_correo_esta_limitado_por_tasa():
     ruta = next(r for r, m in _rutas_api() if r.path == "/api/email/send" and m == "POST")
-    assert any(isinstance(d.call, RateLimit) for d in ruta.dependant.dependencies)
+    assert any(es_limitador(d.call) for d in ruta.dependant.dependencies)
 
 
 def test_los_endpoints_obsoletos_estan_marcados():

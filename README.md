@@ -43,7 +43,8 @@ Supabase (PostgreSQL)
 | `app/domain/validators.py` | Validación estructurada: `{field_key, code, message}` |
 | `app/services/tree_engine.py` | Motor determinista. No importa Anthropic |
 | `app/services/tree_repository.py` | Persistencia. Propaga errores, no los traga |
-| `app/dependencies.py` | Identidad, rol y propiedad de sesión, centralizados |
+| `app/dependencies.py` | Identidad, rol, propiedad de sesión y límites de tasa |
+| `app/services/memory_db.py` | Modo demostración: todo funciona sin Supabase |
 
 El estado de avance vive en Supabase, no en memoria del proceso: el sistema sobrevive un reinicio y funciona con varias réplicas.
 
@@ -87,7 +88,23 @@ Genera la clave de firma de tokens:
 python -c "import secrets; print(secrets.token_urlsafe(48))"
 ```
 
-### 3. Primera cuenta de administrador
+### 3. Cuentas: dos caminos que conviven
+
+**Registro abierto.** Cualquier persona puede crear su cuenta desde `/` → *Regístrate aquí*. El formulario captura quién es, a qué se dedica y qué forma:
+
+| Bloque | Campos |
+|---|---|
+| Quién eres | Nombre, correo, contraseña |
+| A qué te dedicas | Cargo o rol, programa, teléfono |
+| Qué formas | Líneas de acción, temas y actividades que facilita |
+
+**Salvaguarda:** el rol de una cuenta auto-registrada es **siempre `facilitador`**, y lo fuerza `auth_service.registrar_usuario`, que ni siquiera acepta el parámetro `rol`. Si se tomara del formulario, cualquiera se haría administrador desde una pantalla pública. Subir a `coordinador` o `admin` solo puede hacerlo un administrador desde el panel.
+
+El registro está limitado a 5 intentos por hora y por dirección IP. El panel distingue quién se registró solo y quién fue creado por un administrador.
+
+**Alta desde el panel.** Un administrador sigue pudiendo crear cuentas con contraseña temporal, que el titular debe cambiar en su primer ingreso.
+
+### 4. Primera cuenta de administrador
 
 No hay auto-registro. La primera cuenta se crea con un script que pide la contraseña de forma interactiva:
 
@@ -97,7 +114,7 @@ cd backend && python -m scripts.crear_admin
 
 Desde el panel, ese administrador crea las cuentas de los facilitadores con una contraseña temporal que deben cambiar en su primer ingreso.
 
-### 4. Ejecución
+### 5. Ejecución
 
 ```bash
 cd backend && uvicorn app.main:app --reload --port 8000
@@ -127,7 +144,7 @@ Al arrancar se valida el contrato de 25 campos y el grafo del árbol. Si algo es
 cd backend && pytest -q
 ```
 
-184 pruebas: contrato de campos, validación del grafo, recorridos por cada rama, validaciones con sus límites, idempotencia del motor, retroceso, marcado `stale`, composición, proyección, esquema de ideas y cobertura de autenticación en todas las rutas.
+227 pruebas: contrato de campos, validación del grafo, recorridos por cada rama, validaciones con sus límites, idempotencia del motor, retroceso, marcado `stale`, composición, proyección, esquema de ideas, registro y escalada de privilegios, y peticiones HTTP reales contra la aplicación con TestClient.
 
 Usan un cliente de Supabase simulado: no necesitan red ni credenciales.
 
@@ -142,7 +159,8 @@ CI en `.github/workflows/ci.yml`: ruff, mypy permisivo, pytest, y una comprobaci
 - Autenticación JWT propia con Argon2id. Bloqueo temporal tras cinco intentos fallidos.
 - Toda ruta de datos exige identidad y verifica propiedad de sesión en `app/dependencies.py`.
 - Panel de administrador por rol. **Se eliminó el PIN en el parámetro de URL.**
-- Límite de tasa en las rutas que llaman al modelo y al envío de correo.
+- Límite de tasa en las rutas que llaman al modelo, en el envío de correo, y por IP en el registro y el acceso.
+- El registro abierto nunca otorga un rol distinto de `facilitador`.
 - Los valores escritos en Google Sheets se sanean contra inyección de fórmulas.
 - RLS activo en las nueve tablas, con `anon` y `authenticated` revocados.
 
@@ -164,7 +182,8 @@ Distinguir lo probado de lo que solo compila:
 - Ruff sin hallazgos.
 
 **Verificado en navegador**
-- Modo demostración completo: acceso, creación de sesión y avance por el árbol, con las respuestas persistidas.
+- Modo demostración completo: registro, acceso, creación de sesión y avance por el árbol, con las respuestas persistidas.
+- Registro abierto de punta a punta: el perfil profesional queda guardado y el rol resultante es `facilitador`.
 - Las dos vistas cargan con sus hojas de estilo y el logotipo institucional.
 
 **No verificado**

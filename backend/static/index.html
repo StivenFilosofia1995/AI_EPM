@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Consolidación Metodológica — Fundación EPM</title>
   <link rel="icon" href="/static/assets/favicon.svg" type="image/svg+xml" />
-  <link rel="stylesheet" href="/static/css/styles.css" />
-  <link rel="stylesheet" href="/static/css/tree.css" />
+  <link rel="stylesheet" href="/static/css/styles.css?v=2.1.0" />
+  <link rel="stylesheet" href="/static/css/tree.css?v=2.1.0" />
 </head>
 <body>
 
@@ -34,6 +34,92 @@
     </form>
 
     <div class="error-caja oculto" id="errorAcceso" role="alert" aria-live="assertive"></div>
+
+    <p class="pie-acceso">
+      ¿Aún no tienes cuenta?
+      <button type="button" class="enlace" id="btnIrRegistro">Regístrate aquí</button>
+    </p>
+  </div>
+</div>
+
+<!-- ══ Registro ════════════════════════════════════════════════════════ -->
+<div class="acceso oculto" id="pantallaRegistro">
+  <div class="acceso-card acceso-card-ancha">
+    <div class="acceso-logo" data-logo-epm="34px"></div>
+    <h1>Crear cuenta</h1>
+    <p class="sub">
+      Cuéntanos quién eres, a qué te dedicas y qué formas. Tu cuenta quedará
+      como facilitador o facilitadora; un administrador puede ampliarla después.
+    </p>
+
+    <form id="formRegistro" novalidate>
+      <fieldset class="grupo">
+        <legend>Quién eres</legend>
+        <div class="campo">
+          <label for="rNombre">Nombre completo <span class="req">*</span></label>
+          <input type="text" id="rNombre" autocomplete="name" maxlength="120" required />
+        </div>
+        <div class="campo">
+          <label for="rEmail">Correo institucional <span class="req">*</span></label>
+          <input type="email" id="rEmail" autocomplete="username" required />
+        </div>
+        <div class="fila-doble">
+          <div class="campo">
+            <label for="rPass">Contraseña <span class="req">*</span></label>
+            <input type="password" id="rPass" autocomplete="new-password" required />
+          </div>
+          <div class="campo">
+            <label for="rPass2">Confirma la contraseña <span class="req">*</span></label>
+            <input type="password" id="rPass2" autocomplete="new-password" required />
+          </div>
+        </div>
+        <p class="nota">Mínimo 10 caracteres, con al menos una letra y un número.</p>
+      </fieldset>
+
+      <fieldset class="grupo">
+        <legend>A qué te dedicas</legend>
+        <div class="campo">
+          <label for="rCargo">Cargo o rol <span class="req">*</span></label>
+          <input type="text" id="rCargo" maxlength="120" required
+                 placeholder="Por ejemplo: mediadora de lectura, tallerista ambiental" />
+        </div>
+        <div class="fila-doble">
+          <div class="campo">
+            <label for="rPrograma">Programa o proyecto</label>
+            <select id="rPrograma"></select>
+          </div>
+          <div class="campo">
+            <label for="rTelefono">Teléfono de contacto</label>
+            <input type="tel" id="rTelefono" maxlength="40" autocomplete="tel" />
+          </div>
+        </div>
+      </fieldset>
+
+      <fieldset class="grupo">
+        <legend>Qué formas</legend>
+        <div class="campo">
+          <label id="lblLineas">Líneas de acción en las que trabajas</label>
+          <div class="opciones opciones-compactas" id="rLineas"
+               role="group" aria-labelledby="lblLineas"></div>
+        </div>
+        <div class="campo">
+          <label for="rTemas">Temas o actividades que facilitas</label>
+          <textarea id="rTemas" rows="3" maxlength="2000"
+                    placeholder="Por ejemplo: cuidado del agua con primera infancia, clubes de lectura juvenil"></textarea>
+        </div>
+      </fieldset>
+
+      <button type="submit" class="btn btn-primario btn-bloque" id="btnRegistrar">
+        Crear cuenta y entrar
+      </button>
+    </form>
+
+    <div class="error-caja oculto" id="errorRegistro" role="alert" aria-live="assertive"></div>
+
+    <p class="pie-acceso">
+      ¿Ya tienes cuenta?
+      <button type="button" class="enlace" id="btnIrAcceso">Ingresa aquí</button>
+    </p>
   </div>
 </div>
 
@@ -116,7 +202,10 @@
   </main>
 </div>
 
-<script src="/static/js/logo.js"></script>
-<script src="/static/js/app.js"></script>
+<!-- El parámetro ?v= fuerza al navegador a descargar el archivo nuevo
+     tras un despliegue. Súbelo al publicar cambios en el frontend.
+     El backend además envía Cache-Control: no-cache en .js y .css. -->
+<script src="/static/js/logo.js?v=2.1.0"></script>
+<script src="/static/js/app.js?v=2.1.0"></script>
 </body>
 </html>

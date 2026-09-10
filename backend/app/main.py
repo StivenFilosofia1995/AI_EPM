@@ -7,6 +7,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.types import Scope
 
 from app.config import settings
 from app.domain.fields import assert_contract
@@ -133,9 +134,28 @@ app.include_router(health_router)
 app.include_router(legacy_router)
 
 # ─── Frontend estático ──────────────────────────────────────────────────────
+
+
+class EstaticosSinCache(StaticFiles):
+    """
+    Obliga a revalidar el JS y el CSS en cada carga.
+
+    Sin esto, el navegador conserva la versión anterior de app.js después de
+    un despliegue y el usuario ve una interfaz que ya no corresponde al
+    backend, sin ningún error visible. Las imágenes y fuentes sí se cachean:
+    cambian de nombre cuando cambian.
+    """
+
+    async def get_response(self, path: str, scope: Scope):
+        respuesta = await super().get_response(path, scope)
+        if path.endswith((".js", ".css", ".html")):
+            respuesta.headers["Cache-Control"] = "no-cache, must-revalidate"
+        return respuesta
+
+
 STATIC_DIR = Path(__file__).parent.parent / "static"
 if STATIC_DIR.exists():
-    app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+    app.mount("/static", EstaticosSinCache(directory=STATIC_DIR), name="static")
 
     @app.get("/", response_class=FileResponse, include_in_schema=False)
     async def root():

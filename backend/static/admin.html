@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Panel de administración — Fundación EPM</title>
   <link rel="icon" href="/static/assets/favicon.svg" type="image/svg+xml" />
-  <link rel="stylesheet" href="/static/css/styles.css" />
-  <link rel="stylesheet" href="/static/css/tree.css" />
+  <link rel="stylesheet" href="/static/css/styles.css?v=2.1.0" />
+  <link rel="stylesheet" href="/static/css/tree.css?v=2.1.0" />
   <style>
     .admin-shell { max-width: 1280px; margin: 0 auto; padding: 26px 22px; }
     .admin-cab {
@@ -91,7 +91,7 @@
   <div id="contenido"></div>
 </div>
 
-<script src="/static/js/logo.js"></script>
+<script src="/static/js/logo.js?v=2.1.0"></script>
 <script>
 'use strict';
 const TOKEN_KEY = 'epm_token';
@@ -407,14 +407,32 @@ async function vistaCuentas(c) {
 
   const tabla = el('table', { class: 'tabla-resumen' });
   tabla.appendChild(el('thead', {}, el('tr', {},
-    ...['Nombre','Correo','Rol','Programa','Activa','Último acceso',''].map(h => el('th', { text: h })))));
+    ...['Nombre','Correo','Rol','Cargo','Programa','Qué forma','Origen','Activa','Último acceso','']
+      .map(h => el('th', { text: h })))));
   const tb = el('tbody');
   for (const u of d.usuarios) {
+    const lineas = Array.isArray(u.lineas_accion) ? u.lineas_accion : [];
+    const queForma = el('td');
+    if (lineas.length) {
+      for (const l of lineas) {
+        queForma.appendChild(el('span', { class: 'etiqueta-bloque', text: l,
+                                          style: 'margin:0 4px 4px 0;display:inline-block' }));
+      }
+    }
+    if (u.temas) queForma.appendChild(el('div', { class: 'hist', text: u.temas }));
+    if (!lineas.length && !u.temas) queForma.textContent = '—';
+
     tb.appendChild(el('tr', {},
       el('td', { text: u.nombre }),
       el('td', { text: u.email }),
       el('td', {}, el('span', { class: 'etiqueta-bloque', text: u.rol })),
+      el('td', { text: u.cargo || '—' }),
       el('td', { text: u.programa || '—' }),
+      queForma,
+      el('td', {}, el('span', {
+        class: u.auto_registrado ? 'marca-origen origen-sugerencia_ia' : '',
+        text: u.auto_registrado ? 'se registró' : 'creada por admin',
+      })),
       el('td', { text: u.activo ? 'Sí' : 'No' }),
       el('td', { text: fecha(u.ultimo_acceso) }),
       el('td', {}, USUARIO.rol === 'admin' && u.id !== USUARIO.id

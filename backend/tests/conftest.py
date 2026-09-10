@@ -188,6 +188,7 @@ def cliente(monkeypatch) -> ClienteFalso:
     # ideas_service hace "from app.services.db import get_client", asi que el
     # nombre queda ligado en SU modulo: parchear solo db no lo alcanza.
     monkeypatch.setattr("app.services.ideas_service.get_client", lambda: falso)
+    monkeypatch.setattr("app.services.auth_service.get_client", lambda: falso)
     return falso
 
 

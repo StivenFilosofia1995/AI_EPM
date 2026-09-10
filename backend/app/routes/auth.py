@@ -5,7 +5,14 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, EmailStr, Field
 
-from app.dependencies import get_current_user, require_admin, require_supervision
+from app.dependencies import (
+    get_current_user,
+    limitar_login,
+    limitar_registro,
+    require_admin,
+    require_supervision,
+)
+from app.domain.fields import LINEAS_ACCION, PROGRAMAS
 from app.services import auth_service
 from app.services.auth_service import AuthError
 
@@ -25,7 +32,8 @@ class LoginResponse(BaseModel):
     user: dict
 
 
-@router.post("/login", response_model=LoginResponse)
+@router.post("/login", response_model=LoginResponse,
+             dependencies=[Depends(limitar_login)])
 async def login(body: LoginBody):
     try:
         user = await auth_service.authenticate(body.email, body.password)
@@ -78,6 +86,104 @@ async def cambiar_password(
     return {"ok": True}
 
 
+# ─── Registro abierto ───────────────────────────────────────────────────────
+
+
+@router.get("/registro/opciones")
+async def opciones_registro():
+    """Catálogos para pintar el formulario. Público, sin datos sensibles."""
+    return {
+        "programas": list(PROGRAMAS),
+        "lineas_accion": list(LINEAS_ACCION),
+    }
+
+
+class RegistroBody(BaseModel):
+    nombre: str = Field(min_length=3, max_length=120)
+    email: EmailStr
+    password: str = Field(min_length=10, max_length=200)
+    # A qué se dedica
+    cargo: str = Field(min_length=3, max_length=120)
+    programa: str | None = None
+    telefono: str | None = Field(default=None, max_length=40)
+    # Qué forma
+    lineas_accion: list[str] = Field(default_factory=list)
+    temas: str | None = Field(default=None, max_length=2000)
+
+
+@router.post("/registro", status_code=201,
+             dependencies=[Depends(limitar_registro)])
+async def registro(body: RegistroBody):
+    """
+    Alta por iniciativa de la propia persona.
+
+    El rol resultante es SIEMPRE 'facilitador': no se toma del cuerpo de la
+    petición. Un administrador puede subirlo después desde el panel.
+    """
+    try:
+        nuevo = await auth_service.registrar_usuario(
+            email=str(body.email),
+            nombre=body.nombre,
+            password=body.password,
+            cargo=body.cargo,
+            programa=body.programa,
+            lineas_accion=body.lineas_accion,
+            temas=body.temas,
+            telefono=body.telefono,
+        )
+    except AuthError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    # Se devuelve el token para que pueda entrar de una vez.
+    token, expires_in = auth_service.create_access_token(nuevo)
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "expires_in": expires_in,
+        "debe_cambiar_password": False,
+        "user": {
+            "id": nuevo["id"],
+            "email": nuevo["email"],
+            "nombre": nuevo["nombre"],
+            "rol": nuevo["rol"],
+            "programa": nuevo.get("programa"),
+        },
+    }
+
+
+class PerfilBody(BaseModel):
+    nombre: str | None = Field(default=None, min_length=3, max_length=120)
+    cargo: str | None = Field(default=None, min_length=3, max_length=120)
+    programa: str | None = None
+    telefono: str | None = Field(default=None, max_length=40)
+    lineas_accion: list[str] | None = None
+    temas: str | None = Field(default=None, max_length=2000)
+
+
+@router.patch("/perfil")
+async def actualizar_perfil(body: PerfilBody, user: dict = Depends(get_current_user)):
+    """Cada quien edita su propio perfil. Nunca su rol ni su estado."""
+    cambios = {k: v for k, v in body.model_dump().items() if v is not None}
+    try:
+        await auth_service.actualizar_perfil(user["id"], cambios)
+    except AuthError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return {"ok": True}
+
+
+@router.get("/perfil")
+async def ver_perfil(user: dict = Depends(get_current_user)):
+    completo = await auth_service.get_user_by_id(user["id"])
+    if completo is None:
+        raise HTTPException(status_code=404, detail="La cuenta no existe.")
+    return {
+        k: completo.get(k)
+        for k in ("id", "nombre", "email", "rol", "cargo", "programa",
+                  "lineas_accion", "temas", "telefono", "auto_registrado",
+                  "created_at", "ultimo_acceso")
+    }
+
+
 # ─── Gestión de cuentas (solo administrador) ────────────────────────────────
 
 
@@ -87,6 +193,10 @@ class CrearUsuarioBody(BaseModel):
     password_temporal: str = Field(min_length=10)
     rol: str = "facilitador"
     programa: str | None = None
+    cargo: str | None = None
+    telefono: str | None = None
+    lineas_accion: list[str] = Field(default_factory=list)
+    temas: str | None = None
 
 
 @router.post("/usuarios", status_code=201)
@@ -106,6 +216,12 @@ async def crear_usuario(
             rol=body.rol,
             programa=body.programa,
             creado_por=admin["id"],
+            perfil={
+                "cargo": body.cargo,
+                "telefono": body.telefono,
+                "lineas_accion": body.lineas_accion,
+                "temas": body.temas,
+            },
         )
     except AuthError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -121,6 +237,7 @@ async def crear_usuario(
 
 @router.get("/usuarios")
 async def listar_usuarios(_: dict = Depends(require_supervision)):
+    """Directorio: quién es cada quien, a qué se dedica y qué forma."""
     return {"usuarios": await auth_service.list_users()}
 
 
