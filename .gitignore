@@ -36,5 +36,13 @@ uploads/
 # Logs
 *.log
 
-# Docker
-.dockerignore
+
+# Credenciales — NUNCA versionar
+service_account.json
+backend/service_account.json
+*-service-account.json
+credentials.json
+client_secret*.json
+*.pem
+*.key
+*.p12
