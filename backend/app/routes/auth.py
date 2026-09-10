@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, EmailStr, Field
 
@@ -15,6 +17,8 @@ from app.dependencies import (
 from app.domain.fields import LINEAS_ACCION, PROGRAMAS
 from app.services import auth_service
 from app.services.auth_service import AuthError
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/auth", tags=["autenticación"])
 
@@ -133,6 +137,18 @@ async def registro(body: RegistroBody):
         )
     except AuthError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except Exception as exc:
+        # Un fallo de base de datos aquí es casi siempre una migración sin
+        # aplicar. El usuario merece saberlo, no un 500 mudo.
+        logger.error("Fallo al registrar %s: %s", body.email, exc)
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "No se pudo crear la cuenta por un problema de base de datos. "
+                "Verifica que las migraciones estén aplicadas: "
+                f"{type(exc).__name__}: {exc}"
+            ),
+        ) from exc
 
     # Se devuelve el token para que pueda entrar de una vez.
     token, expires_in = auth_service.create_access_token(nuevo)

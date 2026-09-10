@@ -1,4 +1,5 @@
 import logging
+import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -175,6 +176,34 @@ async def errores_de_validacion(_: Request, exc: RequestValidationError):
 
     resumen = " ".join(d["message"] for d in detalles) or "Los datos enviados no son válidos."
     return JSONResponse(status_code=422, content={"detail": resumen, "errors": detalles})
+
+
+@app.exception_handler(Exception)
+async def error_no_controlado(request: Request, exc: Exception):
+    """
+    Ningún fallo debe llegar al usuario como un "Error 500." mudo.
+
+    Se registra la traza completa con una referencia corta, y esa misma
+    referencia se le muestra a quien usa la aplicación. Así, cuando alguien
+    reporta un problema, se puede encontrar la traza exacta en los registros
+    en vez de adivinar.
+    """
+    ref = uuid.uuid4().hex[:8]
+    logger.exception(
+        "Error no controlado [%s] en %s %s: %s",
+        ref, request.method, request.url.path, exc,
+    )
+    return JSONResponse(
+        status_code=500,
+        content={
+            "detail": (
+                "Ocurrió un error inesperado en el servidor. "
+                f"Referencia para soporte: {ref}"
+            ),
+            "referencia": ref,
+            "tipo": type(exc).__name__,
+        },
+    )
 
 
 # ─── Rutas de API ───────────────────────────────────────────────────────────

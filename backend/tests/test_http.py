@@ -257,3 +257,57 @@ def test_ningun_mensaje_queda_en_ingles(app_cliente):
     texto = r.json()["detail"].lower()
     for palabra in ("string", "should", "field required", "value is not"):
         assert palabra not in texto, f"Quedó jerga en inglés: {texto}"
+
+
+# ─── Ningún fallo debe llegar como "Error 500." mudo ────────────────────────
+
+
+def test_un_fallo_de_base_de_datos_no_devuelve_un_500_mudo(app_cliente, monkeypatch):
+    """
+    Regresión: registrarse contra una base sin la migración 010 devolvía
+    "Error 500." sin decir nada, y no había forma de diagnosticarlo.
+    """
+    async def _explotar(**_k):
+        raise RuntimeError(
+            "{'code': 'PGRST204', 'message': \"Could not find the 'cargo' column\"}"
+        )
+
+    monkeypatch.setattr("app.services.auth_service.registrar_usuario", _explotar)
+
+    r = app_cliente.post("/api/auth/registro", json=REGISTRO)
+    assert r.status_code == 503, r.text
+    detalle = r.json()["detail"]
+    assert "migraciones" in detalle.lower()
+    assert "cargo" in detalle
+
+
+def test_el_error_inesperado_trae_una_referencia(cliente, monkeypatch):
+    """Sin referencia, un reporte de 'me sale error 500' es indiagnosticable."""
+    async def _explotar(*_a, **_k):
+        raise ZeroDivisionError("algo se rompió muy adentro")
+
+    monkeypatch.setattr("app.services.bootstrap.modo_demostracion", lambda: False)
+    monkeypatch.setattr("app.services.auth_service.list_users", _explotar)
+
+    from app.main import app
+
+    # raise_server_exceptions=False para observar la respuesta que recibiría
+    # un navegador, en lugar de que TestClient relance la excepción.
+    with TestClient(app, raise_server_exceptions=False) as app_cliente:
+        registro = app_cliente.post("/api/auth/registro", json=REGISTRO).json()
+    # Se necesita rol de supervisión: se eleva el del token de prueba.
+        from app.services import auth_service
+        token, _ = auth_service.create_access_token({
+            "id": registro["user"]["id"], "email": registro["user"]["email"],
+            "nombre": registro["user"]["nombre"], "rol": "admin", "programa": None,
+        })
+
+        r = app_cliente.get("/api/auth/usuarios",
+                            headers={"Authorization": f"Bearer {token}"})
+
+    assert r.status_code == 500
+    cuerpo = r.json()
+    assert cuerpo["referencia"], "El 500 debe traer una referencia rastreable."
+    assert len(cuerpo["referencia"]) == 8
+    assert cuerpo["tipo"] == "ZeroDivisionError"
+    assert "Referencia" in cuerpo["detail"]
