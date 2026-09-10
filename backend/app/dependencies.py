@@ -174,7 +174,6 @@ def limitador_por_ip(veces: int, por_segundos: int, nombre: str):
 # bloquea a gente legítima: 5 registros por hora dejaba fuera a un equipo
 # entero inscribiéndose en la misma jornada.
 limitar_modelo = limitador_por_usuario(veces=30, por_segundos=300, nombre="modelo")
-limitar_correo = limitador_por_usuario(veces=15, por_segundos=600, nombre="correo")
 limitar_registro = limitador_por_ip(veces=40, por_segundos=3600, nombre="registro")
 limitar_login = limitador_por_ip(veces=40, por_segundos=600, nombre="login")
 

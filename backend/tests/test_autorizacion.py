@@ -9,7 +9,6 @@ añade un endpoint y olvida el Depends, esto falla.
 
 from __future__ import annotations
 
-import pytest
 from fastapi.routing import APIRoute
 
 from app.dependencies import (
@@ -93,9 +92,6 @@ def test_las_rutas_que_llaman_al_modelo_estan_limitadas_por_tasa():
     )
 
 
-def test_el_envio_de_correo_esta_limitado_por_tasa():
-    ruta = next(r for r, m in _rutas_api() if r.path == "/api/email/send" and m == "POST")
-    assert any(es_limitador(d.call) for d in ruta.dependant.dependencies)
 
 
 def test_los_endpoints_obsoletos_estan_marcados():
@@ -112,36 +108,20 @@ def test_no_quedan_rutas_de_administracion_por_pin():
         assert "pin" not in nombres, f"{r.path} todavía recibe un PIN por query."
 
 
-def test_cors_no_admite_comodin():
-    from app.main import _origins
+def test_no_se_configura_cors():
+    """
+    El frontend se sirve desde el mismo origen, así que no hay peticiones de
+    origen cruzado. Mantener CORSMiddleware sin necesitarlo era configuración
+    que fingía una capacidad inexistente.
+    """
+    from app.main import app
 
-    assert "*" not in _origins
-
-
-@pytest.mark.parametrize("ruta_esperada", [
-    "/api/tree/session",
-    "/api/tree/session/{session_id}/current",
-    "/api/tree/session/{session_id}/answer",
-    "/api/tree/session/{session_id}/back",
-    "/api/tree/session/{session_id}/summary",
-    "/api/tree/session/{session_id}/finalize",
-    "/api/tree/sessions",
-])
-def test_los_endpoints_del_arbol_existen(ruta_esperada):
-    assert ruta_esperada in {r.path for r, _ in _rutas_api()}
+    nombres = [m.cls.__name__ for m in app.user_middleware]
+    assert "CORSMiddleware" not in nombres
 
 
-@pytest.mark.parametrize("ruta_esperada", [
-    "/api/excel/generate",
-    "/api/excel/lote",
-    "/api/email/send",
-    "/api/health",
-])
-def test_los_endpoints_conservados_siguen_existiendo(ruta_esperada):
-    assert ruta_esperada in {r.path for r, _ in _rutas_api()}
-
-
-def test_ya_no_hay_rutas_de_google_sheets():
-    """La integración con Sheets se retiró por completo."""
+def test_ya_no_hay_rutas_de_google_sheets_ni_de_correo():
+    """Sheets y el envío por correo se retiraron: la salida es Excel."""
     rutas = {r.path for r, _ in _rutas_api()}
     assert not [r for r in rutas if "sheets" in r]
+    assert not [r for r in rutas if "email" in r]

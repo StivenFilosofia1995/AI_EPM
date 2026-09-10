@@ -38,17 +38,8 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 480
 
-    # ── Email ─────────────────────────────────────────────────────────────────
-    SMTP_HOST: str = "smtp.gmail.com"
-    # Puerto primario. Si STARTTLS falla, el servicio reintenta en 465 con SSL.
-    SMTP_PORT: int = 587
-    SMTP_USER: str | None = None
-    SMTP_PASSWORD: str | None = None
-
     # ── App ───────────────────────────────────────────────────────────────────
     APP_NAME: str = "EPM — Consolidación Metodológica"
-    # Lista separada por comas. Prohibido "*" en producción.
-    CORS_ORIGINS: str = "http://localhost:8000"
     PORT: int = 8000
 
     # ── Legado — flujo conversacional en retiro ───────────────────────────────
@@ -57,9 +48,6 @@ class Settings(BaseSettings):
     USE_SUPABASE_MEMORY: bool = True
     MEMORY_WINDOW_MESSAGES: int = 100
     MAX_HISTORY: int = 20
-    # TODO: eliminar junto con las rutas /api/admin/* basadas en PIN, una vez
-    # que el panel de administrador use autenticación por rol.
-    ADMIN_PIN: str = "epm2024"
 
     # extra="ignore" evita que una variable sobrante en .env tumbe el arranque.
     # Sin esto, copiar .env.example a .env con una variable de más provoca un

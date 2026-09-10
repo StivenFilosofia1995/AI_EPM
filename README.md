@@ -23,7 +23,7 @@ Navegador (sin framework, sin build)
 FastAPI
    │  routes/tree.py        → motor de árbol (sin modelo)
    │  routes/auth.py        → JWT propio, Argon2id
-   │  routes/exports.py     → Excel y correo
+   │  routes/exports.py     → Excel
    │  routes/admin.py       → trazabilidad, por rol
    │  routes/ideas.py       → único punto que llama al modelo
    ▼
@@ -131,14 +131,14 @@ Al arrancar se valida el contrato de 25 campos y el grafo del árbol. Si algo es
 | `SUPABASE_URL` | Sí | Proyecto de Supabase |
 | `SUPABASE_SERVICE_ROLE_KEY` | Sí | Salta el RLS. Trátala como contraseña de administrador de base de datos |
 | `SECRET_KEY` | Sí | Firma los tokens. Cambiarla invalida toda sesión abierta |
-| `CORS_ORIGINS` | Sí | Lista separada por comas. Prohibido `*` |
 | `ANTHROPIC_API_KEY` | No | Solo análisis e ideas. Sin ella se consolida igual |
-| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD` | No | Envío de correo |
 | `JWT_ALGORITHM`, `ACCESS_TOKEN_EXPIRE_MINUTES` | No | Valores por defecto razonables |
 
 ## Exportación
 
-Todo sale en Excel. **La integración con Google Sheets se retiró**: la consolidación vive en la base de datos y el formato de entrega es el Excel institucional. Eso eliminó cuatro dependencias y, sobre todo, la necesidad de una cuenta de servicio de Google.
+Todo sale en Excel. **Se retiraron Google Sheets y el envío por correo**: la consolidación vive en la base de datos y el formato de entrega es el Excel institucional. Eso eliminó cuatro dependencias, la necesidad de una cuenta de servicio de Google y la de un servidor SMTP.
+
+Tampoco se configura CORS: el frontend se sirve desde el mismo origen que la API, así que no hay peticiones de origen cruzado. Si algún día el frontend se publica en otro dominio, hay que añadir `CORSMiddleware` con la lista explícita de orígenes.
 
 | Quién | Qué puede descargar |
 |---|---|
@@ -168,7 +168,7 @@ CI en `.github/workflows/ci.yml`: ruff, mypy permisivo, pytest, y una comprobaci
 - Autenticación JWT propia con Argon2id. Bloqueo temporal tras cinco intentos fallidos.
 - Toda ruta de datos exige identidad y verifica propiedad de sesión en `app/dependencies.py`.
 - Panel de administrador por rol. **Se eliminó el PIN en el parámetro de URL.**
-- Límite de tasa en las rutas que llaman al modelo, en el envío de correo, y por IP en el registro y el acceso.
+- Límite de tasa por usuario en las rutas que llaman al modelo, y por IP en el registro y el acceso.
 - El registro abierto nunca otorga un rol distinto de `facilitador`.
 - RLS activo en las nueve tablas, con `anon` y `authenticated` revocados.
 
@@ -197,7 +197,6 @@ Distinguir lo probado de lo que solo compila:
 **No verificado**
 - **Las migraciones SQL no se han ejecutado contra ninguna base de datos.** Están escritas y revisadas, no probadas.
 - No se ha hecho ningún recorrido end-to-end contra un Supabase real.
-- No se ha probado el envío de correo.
 - No se ha llamado a la API de Anthropic: la etapa de análisis solo se probó con el cliente simulado.
 - El despliegue en Railway no se ha reintentado tras estos cambios.
 

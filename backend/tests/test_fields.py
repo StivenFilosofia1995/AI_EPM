@@ -78,11 +78,16 @@ def test_el_excel_por_lote_respeta_el_orden_del_contrato():
     assert hoja.cell(1, len(F.FIELD_HEADERS) + 1).value == "Facilitador"
 
 
-def test_email_service_usa_el_mismo_orden():
-    from app.services import email_service as em
+def test_ya_no_existe_el_servicio_de_correo():
+    """El envío por correo se retiró: la salida del sistema es Excel."""
+    import importlib
 
-    assert em.FIELD_KEYS == F.FIELD_KEYS
-    assert em._KEY_TO_HEADER == dict(zip(F.FIELD_KEYS, F.FIELD_HEADERS, strict=True))
+    for modulo in ("app.services.email_service", "app.services.google_sheets_service"):
+        try:
+            importlib.import_module(modulo)
+        except ModuleNotFoundError:
+            continue
+        raise AssertionError(f"{modulo} debería haberse eliminado.")
 
 
 def test_columnas_de_la_migracion_coinciden_con_las_claves():

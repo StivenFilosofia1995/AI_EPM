@@ -5,7 +5,6 @@ from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.types import Scope
@@ -53,9 +52,6 @@ async def lifespan(_: FastAPI):
             "SECRET_KEY tiene el valor por defecto. Configúrala antes de exponer "
             "la aplicación: los tokens de sesión son falsificables."
         )
-    if settings.CORS_ORIGINS.strip() == "*":
-        logger.warning("CORS_ORIGINS está en '*'. Restringe los orígenes en producción.")
-
     if modo_demostracion():
         logger.warning(
             "SUPABASE_URL no está configurada: se arranca en MODO DEMOSTRACIÓN. "
@@ -94,17 +90,10 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# ─── CORS ───────────────────────────────────────────────────────────────────
-# Prohibido "*": con allow_credentials=True los navegadores rechazan el
-# comodín, así que la configuración anterior ni siquiera hacía lo que aparentaba.
-_origins = [o.strip() for o in settings.CORS_ORIGINS.split(",") if o.strip() and o.strip() != "*"]
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=_origins,
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type"],
-)
+# No se configura CORS: el frontend se sirve desde este mismo origen, así que
+# el navegador no emite peticiones de origen cruzado. Si algún día el frontend
+# se publica en otro dominio, hay que añadir CORSMiddleware con la lista
+# explícita de orígenes permitidos.
 
 # ─── Errores de validación en español ───────────────────────────────────────
 # Pydantic los emite en inglés y con jerga interna. El usuario final de esta
