@@ -14,6 +14,7 @@ from app.routes.admin import router as admin_router
 from app.routes.auth import router as auth_router
 from app.routes.exports import router as exports_router
 from app.routes.health import router as health_router
+from app.routes.ideas import router as ideas_router
 from app.routes.legacy import router as legacy_router
 from app.routes.tree import router as tree_router
 
@@ -79,6 +80,7 @@ app.add_middleware(
 app.include_router(auth_router)
 app.include_router(tree_router)
 app.include_router(exports_router)
+app.include_router(ideas_router)
 app.include_router(admin_router)
 app.include_router(health_router)
 # Obsoletos: se registran al final para que nunca ensombrezcan a los actuales.

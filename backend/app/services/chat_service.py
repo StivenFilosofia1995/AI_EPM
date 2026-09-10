@@ -5,7 +5,7 @@ from typing import AsyncGenerator
 
 from app.config import settings
 from app.services import supabase_service
-from app.services.ollama_client import stream_chat
+from app.services.anthropic_client import stream_chat
 from app.services.system_prompt import SYSTEM_PROMPT
 
 # Ordered field keys matching google_sheets_service.FIELD_KEYS

@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>EPM — Consolidación Metodológica</title>
+  <link rel="icon" type="image/svg+xml" href="/static/assets/favicon.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/css/styles.css" />
+</head>
+<body>
+  <div class="app">
+
+    <!-- ── SIDEBAR ── -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-logo">
+        <img src="/static/assets/epm-logo.svg" alt="Fundación Grupo EPM" />
+      </div>
+
+      <div class="divider"></div>
+
+      <p class="nav-label">PROGRESO DEL FORMULARIO</p>
+
+      <!-- Progress bar -->
+      <div class="progress-track">
+        <div class="progress-fill" id="progressFill"></div>
+        <span class="progress-label" id="progressLabel">0 / 25</span>
+      </div>
+
+      <ul class="steps-list" id="stepsList">
+        <li class="section-tag">Identificación &amp; Planeación</li>
+        <li class="step-item" data-step="1"><span class="step-dot"></span><span class="step-name">ID Actividad</span></li>
+        <li class="step-item" data-step="2"><span class="step-dot"></span><span class="step-name">Programa / Proyecto</span></li>
+        <li class="step-item" data-step="3"><span class="step-dot"></span><span class="step-name">Línea de Acción</span></li>
+        <li class="step-item" data-step="4"><span class="step-dot"></span><span class="step-name">Tipo de Actividad</span></li>
+        <li class="step-item" data-step="5"><span class="step-dot"></span><span class="step-name">Nombre</span></li>
+        <li class="step-item" data-step="6"><span class="step-dot"></span><span class="step-name">Público</span></li>
+        <li class="step-item" data-step="7"><span class="step-dot"></span><span class="step-name">Público Específico</span></li>
+        <li class="step-item" data-step="8"><span class="step-dot"></span><span class="step-name">Lugar</span></li>
+        <li class="step-item" data-step="9"><span class="step-dot"></span><span class="step-name">Responsable</span></li>
+        <li class="step-item" data-step="10"><span class="step-dot"></span><span class="step-name">Duración</span></li>
+        <li class="step-item" data-step="11"><span class="step-dot"></span><span class="step-name">Pregunta Problematizadora</span></li>
+        <li class="step-item" data-step="12"><span class="step-dot"></span><span class="step-name">ODS</span></li>
+        <li class="step-item" data-step="13"><span class="step-dot"></span><span class="step-name">Metodología</span></li>
+        <li class="step-item" data-step="14"><span class="step-dot"></span><span class="step-name">Descripción Sesión</span></li>
+        <li class="step-item" data-step="15"><span class="step-dot"></span><span class="step-name">Recursos</span></li>
+        <li class="step-item" data-step="16"><span class="step-dot"></span><span class="step-name">Fecha</span></li>
+
+        <li class="section-tag">Ejecución</li>
+        <li class="step-item" data-step="17"><span class="step-dot"></span><span class="step-name">Logros</span></li>
+        <li class="step-item" data-step="18"><span class="step-dot"></span><span class="step-name">Retos / Dificultades</span></li>
+        <li class="step-item" data-step="19"><span class="step-dot"></span><span class="step-name">Observaciones</span></li>
+        <li class="step-item" data-step="20"><span class="step-dot"></span><span class="step-name">Comentarios</span></li>
+
+        <li class="section-tag">Evaluación</li>
+        <li class="step-item" data-step="21"><span class="step-dot"></span><span class="step-name">Instrumento</span></li>
+        <li class="step-item" data-step="22"><span class="step-dot"></span><span class="step-name">Participantes Evaluados</span></li>
+        <li class="step-item" data-step="23"><span class="step-dot"></span><span class="step-name">Cumplimiento Objetivos</span></li>
+        <li class="step-item" data-step="24"><span class="step-dot"></span><span class="step-name">Acciones de Mejora</span></li>
+        <li class="step-item" data-step="25"><span class="step-dot"></span><span class="step-name">% Cumplimiento</span></li>
+      </ul>
+
+      <div class="sidebar-footer">
+        <!-- Save to Sheets -->
+        <button class="btn-sheets" id="btnSheets">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+            <line x1="16" y1="13" x2="8" y2="13"/>
+            <line x1="16" y1="17" x2="8" y2="17"/>
+            <polyline points="10 9 9 9 8 9"/>
+          </svg>
+          Guardar en Sheets
+        </button>
+        <!-- Download Excel -->
+        <button class="btn-download" id="btnDownload">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="7 10 12 15 17 10"/>
+            <line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+          Descargar Excel
+        </button>
+        <!-- New session -->
+        <button class="btn-new" id="btnNew">Nueva sesión</button>
+        <!-- Email summary -->
+        <button class="btn-email" id="btnEmail">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
+            <polyline points="22,6 12,13 2,6"/>
+          </svg>
+          Enviar por correo
+        </button>
+      </div>
+    </aside>
+
+    <!-- ── MAIN ── -->
+    <main class="main">
+      <!-- Header -->
+      <header class="header">
+        <button class="menu-btn" id="menuBtn" aria-label="Menú">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"
+            fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="3" y1="12" x2="21" y2="12"/>
+            <line x1="3" y1="6" x2="21" y2="6"/>
+            <line x1="3" y1="18" x2="21" y2="18"/>
+          </svg>
+        </button>
+
+        <div class="header-logo-wrap">
+          <img src="/static/assets/epm-logo.svg" alt="Fundación Grupo EPM" class="header-logo" />
+        </div>
+
+        <div class="header-center">
+          <span class="header-title">Consolidación Metodológica</span>
+          <span class="header-sub">Asistente IA · Claude</span>
+        </div>
+
+        <div class="header-right">
+          <!-- Usuario activo -->
+          <div class="user-badge" id="userBadge" title="Usuario activo">
+            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24"
+              fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+              <circle cx="12" cy="7" r="4"/>
+            </svg>
+            <span id="userText">—</span>
+          </div>
+          <!-- Resetear / Nueva actividad -->
+          <button class="reset-btn" id="btnReset" title="Nueva actividad">
+            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24"
+              fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="1 4 1 10 7 10"/>
+              <path d="M3.51 15a9 9 0 1 0 .49-4.5"/>
+            </svg>
+            Nueva actividad
+          </button>
+          <!-- Cambiar / cerrar sesión -->
+          <button class="logout-btn" id="btnLogout" title="Cambiar usuario / Cerrar sesión">
+            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24"
+              fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+              <polyline points="16 17 21 12 16 7"/>
+              <line x1="21" y1="12" x2="9" y2="12"/>
+            </svg>
+            Cambiar usuario
+          </button>
+          <!-- Admin link -->
+          <a href="/admin" class="admin-link" title="Panel de trazabilidad">
+            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24"
+              fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
+              <rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
+            </svg>
+            Admin
+          </a>
+          <div class="memory-badge" id="memoryBadge" title="Memoria Supabase">
+            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24"
+              fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <ellipse cx="12" cy="5" rx="9" ry="3"/>
+              <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/>
+              <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>
+            </svg>
+            <span id="memoryText">Supabase</span>
+          </div>
+          <div class="status-badge" id="statusBadge">
+            <span class="status-dot" id="statusDot"></span>
+            <span id="statusText">Conectando…</span>
+          </div>
+        </div>
+      </header>
+
+      <!-- Toast notification -->
+      <div class="toast" id="toast"></div>
+
+      <!-- Chat area -->
+      <div class="chat" id="chat" role="log" aria-live="polite"></div>
+
+      <!-- Input area -->
+      <div class="input-area">
+        <div class="input-wrapper">
+          <textarea
+            id="input"
+            placeholder="Escribe tu respuesta…"
+            rows="1"
+            autocomplete="off"
+            spellcheck="true"
+            aria-label="Mensaje"
+          ></textarea>
+          <button id="sendBtn" aria-label="Enviar mensaje">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
+              fill="none" stroke="currentColor" stroke-width="2.5"
+              stroke-linecap="round" stroke-linejoin="round">
+              <line x1="22" y1="2" x2="11" y2="13"/>
+              <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+            </svg>
+          </button>
+        </div>
+        <p class="input-hint">Enter para enviar &nbsp;·&nbsp; Shift+Enter para nueva línea</p>
+      </div>
+    </main>
+  </div>
+
+  <script src="/static/js/app.js"></script>
+</body>
+</html>

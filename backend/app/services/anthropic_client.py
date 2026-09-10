@@ -72,7 +72,42 @@ async def stream_chat(
         )
 
 
-async def ollama_health() -> dict:
-    if settings.ANTHROPIC_API_KEY:
-        return {"status": "healthy", "engine": "anthropic", "model": settings.ANTHROPIC_MODEL}
-    return {"status": "degraded", "engine": "anthropic", "model": "unavailable"}
+async def complete(
+    system: str,
+    prompt: str,
+    temperature: float | None = None,
+    max_tokens: int | None = None,
+) -> tuple[str, int, int]:
+    """
+    Llamada sin streaming para la etapa de análisis e ideas.
+
+    Devuelve (texto, tokens_entrada, tokens_salida). Propaga la excepción:
+    a diferencia de stream_chat, aquí un fallo NO se disfraza de respuesta,
+    porque quien llama necesita distinguir un análisis real de un error.
+    """
+    if not settings.ANTHROPIC_API_KEY:
+        raise RuntimeError("ANTHROPIC_API_KEY no está configurada.")
+
+    client = AsyncAnthropic(
+        api_key=settings.ANTHROPIC_API_KEY,
+        base_url=settings.ANTHROPIC_BASE_URL or None,
+        http_client=_make_http_client(),
+    )
+
+    respuesta = await client.messages.create(
+        model=settings.ANTHROPIC_MODEL,
+        system=system,
+        messages=[{"role": "user", "content": prompt}],
+        max_tokens=max_tokens or settings.MAX_TOKENS,
+        temperature=settings.TEMPERATURE if temperature is None else temperature,
+    )
+
+    texto = "".join(
+        bloque.text for bloque in respuesta.content if getattr(bloque, "type", "") == "text"
+    )
+    uso = getattr(respuesta, "usage", None)
+    return (
+        texto,
+        getattr(uso, "input_tokens", 0) or 0,
+        getattr(uso, "output_tokens", 0) or 0,
+    )
