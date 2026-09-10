@@ -268,6 +268,17 @@ textarea.respuesta { min-height: 130px; resize: vertical; line-height: 1.6; }
   color: #fca5a5; font-size: 12.5px; margin-top: 7px;
   display: flex; align-items: flex-start; gap: 6px;
 }
+.campo-error::before { content: '·'; font-weight: 700; }
+
+/* El campo con problema se señala solo: el mensaje va debajo del control
+   que lo causa, no en una caja al final del formulario. */
+.campo.con-error input,
+.campo.con-error select,
+.campo.con-error textarea {
+  border-color: #ef4444;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, .12);
+}
+.campo.con-error label { color: #fca5a5; }
 
 .cargando { color: var(--text-dim); font-size: 14px; padding: 40px 0; text-align: center; }
 

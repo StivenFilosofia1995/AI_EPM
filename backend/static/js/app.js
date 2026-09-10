@@ -82,6 +82,11 @@ async function api(ruta, opciones = {}) {
     const err = new Error(mensajeDeError(datos, r.status));
     err.status = r.status;
     err.detalle = datos && datos.detail;
+    // Lista estructurada {field_key, code, message}: permite señalar el
+    // campo exacto en vez de mostrar un mensaje suelto al final del formulario.
+    err.errores = (datos && datos.errors)
+      || (datos && datos.detail && datos.detail.errors)
+      || null;
     throw err;
   }
   return datos;
@@ -201,16 +206,61 @@ function irAAcceso() {
 $('#btnIrRegistro').addEventListener('click', irARegistro);
 $('#btnIrAcceso').addEventListener('click', irAAcceso);
 
+// Relación entre el campo que reporta el backend y su control en pantalla.
+const CAMPOS_REGISTRO = {
+  nombre: 'rNombre', email: 'rEmail', password: 'rPass', cargo: 'rCargo',
+  programa: 'rPrograma', telefono: 'rTelefono', temas: 'rTemas',
+  lineas_accion: 'rLineas',
+};
+
+function limpiarErroresRegistro() {
+  for (const id of Object.values(CAMPOS_REGISTRO)) {
+    const control = document.getElementById(id);
+    if (!control) continue;
+    control.closest('.campo')?.classList.remove('con-error');
+    control.removeAttribute('aria-invalid');
+  }
+  document.querySelectorAll('#formRegistro .campo-error').forEach(n => n.remove());
+}
+
+function pintarErroresRegistro(errores) {
+  limpiarErroresRegistro();
+  const sueltos = [];
+  let primero = null;
+
+  for (const e of errores) {
+    const id = CAMPOS_REGISTRO[e.field_key];
+    const control = id && document.getElementById(id);
+    if (!control) { sueltos.push(e.message); continue; }
+
+    const campo = control.closest('.campo');
+    campo?.classList.add('con-error');
+    control.setAttribute('aria-invalid', 'true');
+    campo?.appendChild(el('div', { class: 'campo-error', text: e.message }));
+    if (!primero) primero = control;
+  }
+
+  if (primero) {
+    primero.focus();
+    primero.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }
+  return sueltos;
+}
+
 $('#formRegistro').addEventListener('submit', async (e) => {
   e.preventDefault();
   const err = $('#errorRegistro');
   const btn = $('#btnRegistrar');
   err.classList.add('oculto');
+  limpiarErroresRegistro();
 
   const pass = $('#rPass').value;
   if (pass !== $('#rPass2').value) {
-    err.textContent = 'Las contraseñas no coinciden.';
-    err.classList.remove('oculto');
+    const campo = $('#rPass2').closest('.campo');
+    campo.classList.add('con-error');
+    campo.appendChild(el('div', { class: 'campo-error',
+                                  text: 'Las contraseñas no coinciden.' }));
+    $('#rPass2').focus();
     return;
   }
 
@@ -241,8 +291,12 @@ $('#formRegistro').addEventListener('submit', async (e) => {
     await iniciarApp();
     mostrarAviso(`Cuenta creada. Bienvenido, ${USUARIO.nombre}.`, 'ok');
   } catch (ex) {
-    err.textContent = ex.message;
-    err.classList.remove('oculto');
+    const sueltos = Array.isArray(ex.errores) ? pintarErroresRegistro(ex.errores) : null;
+    // Solo se usa la caja general para lo que no pertenece a ningún campo.
+    if (sueltos === null || sueltos.length) {
+      err.textContent = sueltos && sueltos.length ? sueltos.join(' ') : ex.message;
+      err.classList.remove('oculto');
+    }
   } finally {
     btn.disabled = false;
     btn.textContent = 'Crear cuenta y entrar';

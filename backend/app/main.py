@@ -97,33 +97,74 @@ app.add_middleware(
 # ─── Errores de validación en español ───────────────────────────────────────
 # Pydantic los emite en inglés y con jerga interna. El usuario final de esta
 # aplicación es un facilitador, no un desarrollador.
-_TRADUCCIONES = {
-    "value is not a valid email address": "El correo no tiene un formato válido.",
-    "field required": "Este dato es obligatorio.",
-    "Field required": "Este dato es obligatorio.",
-    "String should have at least": "El texto es demasiado corto.",
-    "Input should be a valid integer": "Debe ser un número entero.",
-    "Input should be a valid": "El valor no tiene el formato esperado.",
+#
+# El mensaje debe decir QUÉ campo y CUÁL es la regla. Un "El texto es
+# demasiado corto." a secas, en un formulario con tres campos que tienen
+# longitud mínima, obliga a adivinar.
+
+_ETIQUETAS = {
+    "nombre": "El nombre completo",
+    "email": "El correo",
+    "password": "La contraseña",
+    "password_actual": "La contraseña actual",
+    "password_nueva": "La contraseña nueva",
+    "password_temporal": "La contraseña temporal",
+    "cargo": "El cargo o rol",
+    "programa": "El programa",
+    "telefono": "El teléfono",
+    "temas": "Los temas o actividades",
+    "lineas_accion": "Las líneas de acción",
+    "to_email": "El correo de destino",
+    "session_id": "La sesión",
+    "node_id": "La pregunta",
+    "borrador": "El borrador",
+    "rol": "El rol",
 }
 
 
-def _traducir(mensaje: str) -> str:
-    for clave, es in _TRADUCCIONES.items():
-        if mensaje.startswith(clave) or clave in mensaje:
-            return es
-    return mensaje
+def _etiqueta(campo: str) -> str:
+    return _ETIQUETAS.get(campo, f"El campo {campo}" if campo else "El dato")
+
+
+def _mensaje(campo: str, tipo: str, ctx: dict, original: str) -> str:
+    et = _etiqueta(campo)
+
+    if tipo == "missing":
+        return f"{et} es obligatorio."
+    if tipo == "string_too_short":
+        minimo = ctx.get("min_length")
+        return (f"{et} debe tener al menos {minimo} caracteres."
+                if minimo else f"{et} es demasiado corto.")
+    if tipo == "string_too_long":
+        maximo = ctx.get("max_length")
+        return (f"{et} no puede superar los {maximo} caracteres."
+                if maximo else f"{et} es demasiado largo.")
+    if tipo in ("int_parsing", "int_type"):
+        return f"{et} debe ser un número entero."
+    if tipo in ("greater_than_equal", "greater_than"):
+        return f"{et} debe ser mayor o igual a {ctx.get('ge', ctx.get('gt', 0))}."
+    if tipo in ("less_than_equal", "less_than"):
+        return f"{et} debe ser menor o igual a {ctx.get('le', ctx.get('lt', 0))}."
+    if tipo == "list_type":
+        return f"{et} debe ser una lista de opciones."
+    if "email" in tipo or "email" in original.lower():
+        return f"{et} no tiene un formato válido."
+    return f"{et} no es válido."
 
 
 @app.exception_handler(RequestValidationError)
 async def errores_de_validacion(_: Request, exc: RequestValidationError):
     detalles = []
     for e in exc.errors():
-        campo = ".".join(str(p) for p in e.get("loc", ()) if p not in ("body", "query"))
+        partes = [str(x) for x in e.get("loc", ()) if x not in ("body", "query", "path")]
+        campo = partes[-1] if partes else ""
         detalles.append({
             "field_key": campo or None,
             "code": e.get("type", "invalido"),
-            "message": _traducir(str(e.get("msg", ""))),
+            "message": _mensaje(campo, e.get("type", ""), e.get("ctx") or {},
+                                str(e.get("msg", ""))),
         })
+
     resumen = " ".join(d["message"] for d in detalles) or "Los datos enviados no son válidos."
     return JSONResponse(status_code=422, content={"detail": resumen, "errors": detalles})
 

@@ -202,3 +202,58 @@ def test_no_se_puede_ver_la_sesion_de_otra_persona(app_cliente):
     r = app_cliente.get(f"/api/tree/session/{session_id}/current", headers=cab2)
     # 404, no 403: no se revela que la sesión existe.
     assert r.status_code == 404
+
+
+# ─── Los errores deben decir QUÉ campo y CUÁL es la regla ───────────────────
+# Regresión: un formulario con tres campos de longitud mínima devolvía
+# "El texto es demasiado corto." sin decir cuál, obligando a adivinar.
+
+
+@pytest.mark.parametrize("campo,valor,esperado", [
+    ("cargo", "X", "cargo"),
+    ("nombre", "A", "nombre"),
+    ("password", "corta", "contraseña"),
+])
+def test_el_error_nombra_el_campo_corto(app_cliente, campo, valor, esperado):
+    r = app_cliente.post("/api/auth/registro", json={**REGISTRO, campo: valor})
+    assert r.status_code == 422
+    texto = r.json()["detail"].lower()
+    assert esperado in texto, f"El mensaje no nombra el campo: {texto}"
+    assert "caracteres" in texto, f"El mensaje no dice el mínimo: {texto}"
+
+
+def test_el_error_indica_el_minimo_exacto(app_cliente):
+    r = app_cliente.post("/api/auth/registro", json={**REGISTRO, "password": "corta"})
+    assert "10 caracteres" in r.json()["detail"]
+
+
+def test_el_error_de_campo_faltante_lo_nombra(app_cliente):
+    cuerpo = {k: v for k, v in REGISTRO.items() if k != "cargo"}
+    r = app_cliente.post("/api/auth/registro", json=cuerpo)
+    assert r.status_code == 422
+    assert "cargo" in r.json()["detail"].lower()
+    assert "obligatorio" in r.json()["detail"].lower()
+
+
+def test_el_error_de_correo_invalido_lo_nombra(app_cliente):
+    r = app_cliente.post("/api/auth/registro", json={**REGISTRO, "email": "no-es-correo"})
+    assert r.status_code == 422
+    assert "correo" in r.json()["detail"].lower()
+
+
+def test_los_errores_vienen_por_campo_no_solo_como_resumen(app_cliente):
+    """El frontend los pinta junto al control que los causa."""
+    r = app_cliente.post("/api/auth/registro",
+                         json={**REGISTRO, "cargo": "X", "password": "corta"})
+    errores = r.json()["errors"]
+    campos = {e["field_key"] for e in errores}
+    assert {"cargo", "password"} <= campos
+    for e in errores:
+        assert set(e) == {"field_key", "code", "message"}
+
+
+def test_ningun_mensaje_queda_en_ingles(app_cliente):
+    r = app_cliente.post("/api/auth/registro", json={"nombre": "A", "email": "x"})
+    texto = r.json()["detail"].lower()
+    for palabra in ("string", "should", "field required", "value is not"):
+        assert palabra not in texto, f"Quedó jerga en inglés: {texto}"
