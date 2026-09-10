@@ -17,7 +17,7 @@ from fastapi import APIRouter
 
 from app.config import settings
 from app.domain.tree_loader import TreeError, get_tree
-from app.services.db import DatabaseUnavailable, get_client
+from app.services.db import DatabaseUnavailable, get_client, rol_de_la_clave
 from app.services.schema_check import migraciones_pendientes, verificar_esquema
 
 logger = logging.getLogger(__name__)
@@ -66,6 +66,17 @@ async def health():
     db = await _check_db()
     tree = _check_tree()
 
+    rol = rol_de_la_clave()
+    clave = {
+        "rol_detectado": rol,
+        "estado": "ok" if rol in (None, "service_role") else "incorrecta",
+    }
+    if clave["estado"] == "incorrecta":
+        clave["detalle"] = (
+            f"SUPABASE_SERVICE_ROLE_KEY tiene rol '{rol}'. Se necesita la clave "
+            "service_role (secret), no la anon public."
+        )
+
     esquema: dict = {"estado": "ok"}
     if db["estado"] == "ok":
         try:
@@ -88,11 +99,13 @@ async def health():
         db["estado"] == "ok"
         and tree["estado"] == "ok"
         and esquema["estado"] in ("ok", "desconocido")
+        and clave["estado"] == "ok"
     )
 
     return {
         "status": "healthy" if critico_ok else "degraded",
         "base_datos": db,
+        "clave_supabase": clave,
         "esquema": esquema,
         "arbol": tree,
         "modelo": modelo,

@@ -69,3 +69,60 @@ def reset_client() -> None:
     """Solo para pruebas."""
     global _client
     _client = None
+
+
+# ─── Verificación de la clave ───────────────────────────────────────────────
+# Las claves de Supabase son JWT cuyo payload declara el rol. Confundir la
+# clave `anon` con la `service_role` produce un "permission denied" en mitad
+# de una operación, y el hint de Postgres sugiere justo lo que NO hay que
+# hacer: conceder permisos a `anon` sobre tablas con hashes de contraseña.
+
+
+def rol_de_la_clave() -> str | None:
+    """
+    Rol declarado por SUPABASE_SERVICE_ROLE_KEY, sin verificar la firma.
+
+    Devuelve 'service_role', 'anon', otro rol, o None si no se puede leer
+    (por ejemplo con los formatos sb_secret_ / sb_publishable_, que no son JWT).
+    """
+    clave = (settings.SUPABASE_SERVICE_ROLE_KEY or "").strip()
+    if not clave:
+        return None
+
+    if clave.startswith("sb_secret_"):
+        return "service_role"
+    if clave.startswith("sb_publishable_"):
+        return "anon"
+
+    try:
+        import jwt
+
+        payload = jwt.decode(clave, options={"verify_signature": False})
+        return payload.get("role")
+    except Exception:
+        return None
+
+
+def avisar_si_la_clave_es_publica() -> str | None:
+    """
+    Deja constancia si la clave configurada no es la de servicio.
+    Devuelve el rol detectado.
+    """
+    rol = rol_de_la_clave()
+    if rol in (None, "service_role"):
+        return rol
+
+    linea = "=" * 68
+    logger.error("%s", linea)
+    logger.error("  LA CLAVE DE SUPABASE NO ES LA CORRECTA")
+    logger.error("%s", linea)
+    logger.error("  SUPABASE_SERVICE_ROLE_KEY contiene una clave de rol '%s'.", rol)
+    logger.error("  Se necesita la clave `service_role`, no la `anon public`.")
+    logger.error("")
+    logger.error("  Supabase → Project Settings → API → service_role (secret)")
+    logger.error("")
+    logger.error("  NO concedas permisos a `anon` para sortear el error: esa")
+    logger.error("  clave viaja en el navegador y epm_users guarda los hashes")
+    logger.error("  de contraseña.")
+    logger.error("%s", linea)
+    return rol

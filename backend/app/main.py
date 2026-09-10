@@ -21,7 +21,7 @@ from app.routes.ideas import router as ideas_router
 from app.routes.legacy import router as legacy_router
 from app.routes.tree import router as tree_router
 from app.services.bootstrap import asegurar_admin
-from app.services.db import modo_demostracion
+from app.services.db import avisar_si_la_clave_es_publica, modo_demostracion
 from app.services.schema_check import avisar_si_falta_esquema
 
 logging.basicConfig(
@@ -62,6 +62,9 @@ async def lifespan(_: FastAPI):
             "Los datos viven en memoria y se pierden en cada despliegue. "
             "Para uso real, configura Supabase y ejecuta sql/esquema_completo.sql."
         )
+
+    if not modo_demostracion():
+        avisar_si_la_clave_es_publica()
 
     # Un esquema desactualizado producía un error 500 sin explicación en
     # mitad de un formulario. Es mejor enterarse aquí.

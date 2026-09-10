@@ -184,6 +184,15 @@ async def create_user(
         mensaje = str(exc)
         # PostgREST nombra la columna inexistente. Traducirlo evita que el
         # usuario vea un 500 sin explicación cuando falta una migración.
+        if "42501" in mensaje or "permission denied" in mensaje.lower():
+            logger.error("Permiso denegado sobre epm_users: %s", mensaje)
+            raise AuthError(
+                "La clave de Supabase configurada no tiene permisos sobre la "
+                "tabla de usuarios. Revisa que SUPABASE_SERVICE_ROLE_KEY sea la "
+                "clave `service_role` (secret) y no la `anon public`. No "
+                "concedas permisos a `anon`: esa tabla guarda contraseñas."
+            ) from exc
+
         if "column" in mensaje.lower() or "PGRST204" in mensaje:
             logger.error("Esquema desactualizado al crear la cuenta: %s", mensaje)
             raise AuthError(

@@ -270,3 +270,79 @@ async def test_las_migraciones_pendientes_se_ordenan():
         "epm_respuestas": ["origen"],
     })
     assert pendientes == ["009_origen_y_estimado.sql", "010_perfil_y_registro.sql"]
+
+
+# ─── Clave de Supabase equivocada ───────────────────────────────────────────
+# Regresión: usar la clave `anon` en lugar de `service_role` producía
+# "permission denied for table epm_users" en mitad del registro, y el hint de
+# Postgres sugería conceder permisos a `anon` sobre una tabla con contraseñas.
+
+
+@pytest.mark.parametrize("rol,esperado", [
+    ("service_role", "service_role"),
+    ("anon", "anon"),
+    ("authenticated", "authenticated"),
+])
+async def test_se_detecta_el_rol_de_la_clave(monkeypatch, rol, esperado):
+    import time
+
+    import jwt as pyjwt
+
+    from app.config import settings
+    from app.services.db import rol_de_la_clave
+
+    clave = pyjwt.encode({"role": rol, "exp": int(time.time()) + 9999}, "x")
+    monkeypatch.setattr(settings, "SUPABASE_SERVICE_ROLE_KEY", clave)
+    assert rol_de_la_clave() == esperado
+
+
+@pytest.mark.parametrize("clave,esperado", [
+    ("sb_secret_abc123", "service_role"),
+    ("sb_publishable_abc123", "anon"),
+    ("", None),
+    ("no-es-un-jwt", None),
+])
+async def test_se_detectan_los_formatos_nuevos_de_clave(monkeypatch, clave, esperado):
+    from app.config import settings
+    from app.services.db import rol_de_la_clave
+
+    monkeypatch.setattr(settings, "SUPABASE_SERVICE_ROLE_KEY", clave)
+    assert rol_de_la_clave() == esperado
+
+
+async def test_permiso_denegado_da_un_mensaje_accionable(cliente, monkeypatch):
+    """No debe sugerir conceder permisos a anon: esa tabla guarda contraseñas."""
+
+    class ConsultaRota:
+        def execute(self):
+            raise RuntimeError(
+                "APIError: {'code': '42501', 'hint': 'Grant the required "
+                "privileges to the current role with: GRANT SELECT ON "
+                "public.epm_users TO anon;', 'message': 'permission denied "
+                "for table epm_users'}"
+            )
+
+    tabla_real = cliente.table
+
+    class TablaRota:
+        def insert(self, *_a, **_k):
+            return ConsultaRota()
+
+        def select(self, *a, **k):
+            return tabla_real("epm_users_vacia").select(*a, **k)
+
+    monkeypatch.setattr(
+        cliente, "table",
+        lambda n: TablaRota() if n == "epm_users" else tabla_real(n),
+    )
+
+    with pytest.raises(AuthError) as exc:
+        await registrar(cliente)
+
+    mensaje = str(exc.value)
+    assert "service_role" in mensaje
+    assert "anon public" in mensaje
+    assert "GRANT" not in mensaje, (
+        "El mensaje no debe repetir el hint de Postgres: concederle permisos "
+        "a anon expondría los hashes de contraseña."
+    )
