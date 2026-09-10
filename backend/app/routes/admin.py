@@ -9,7 +9,6 @@ cabeceras Referer. Ahora exige rol admin o coordinador.
 from __future__ import annotations
 
 import asyncio
-from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
@@ -28,12 +27,12 @@ async def _run(fn):
 @router.get("/sesiones")
 async def listar_sesiones(
     _: dict = Depends(require_supervision),
-    user_id: Optional[str] = Query(None),
-    programa: Optional[str] = Query(None),
-    estado: Optional[str] = Query(None),
-    desde: Optional[str] = Query(None, description="Fecha ISO AAAA-MM-DD"),
-    hasta: Optional[str] = Query(None, description="Fecha ISO AAAA-MM-DD"),
-    avance_minimo: Optional[float] = Query(None, ge=0, le=100),
+    user_id: str | None = Query(None),
+    programa: str | None = Query(None),
+    estado: str | None = Query(None),
+    desde: str | None = Query(None, description="Fecha ISO AAAA-MM-DD"),
+    hasta: str | None = Query(None, description="Fecha ISO AAAA-MM-DD"),
+    avance_minimo: float | None = Query(None, ge=0, le=100),
     limit: int = Query(200, ge=1, le=1000),
 ):
     """Sesiones filtrables, con el consolidado en vivo de v_actividades_completas."""

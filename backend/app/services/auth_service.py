@@ -13,8 +13,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime, timedelta, timezone
-from typing import Any, Optional
+from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import jwt
 from argon2 import PasswordHasher
@@ -84,8 +84,8 @@ def create_access_token(user: dict) -> tuple[str, int]:
         "nombre": user["nombre"],
         "rol": user["rol"],
         "programa": user.get("programa"),
-        "exp": datetime.now(timezone.utc) + timedelta(seconds=expira_en),
-        "iat": datetime.now(timezone.utc),
+        "exp": datetime.now(UTC) + timedelta(seconds=expira_en),
+        "iat": datetime.now(UTC),
     }
     token = jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
     return token, expira_en
@@ -109,7 +109,7 @@ async def _run(fn):
     return await asyncio.to_thread(fn)
 
 
-async def get_user_by_email(email: str) -> Optional[dict]:
+async def get_user_by_email(email: str) -> dict | None:
     client = get_client()
     normalizado = email.strip().lower()
     result = await _run(
@@ -119,7 +119,7 @@ async def get_user_by_email(email: str) -> Optional[dict]:
     return rows[0] if rows else None
 
 
-async def get_user_by_id(user_id: str) -> Optional[dict]:
+async def get_user_by_id(user_id: str) -> dict | None:
     client = get_client()
     result = await _run(
         lambda: client.table(USERS).select("*").eq("id", user_id).limit(1).execute()
@@ -146,8 +146,8 @@ async def create_user(
     nombre: str,
     password: str,
     rol: str = "facilitador",
-    programa: Optional[str] = None,
-    creado_por: Optional[str] = None,
+    programa: str | None = None,
+    creado_por: str | None = None,
 ) -> dict:
     if rol not in ROLES:
         raise AuthError(f"Rol inválido: {rol}. Debe ser uno de {ROLES}.")
@@ -184,7 +184,7 @@ async def _registrar_intento_fallido(user: dict) -> None:
     cambios: dict[str, Any] = {"intentos_fallidos": intentos}
     if intentos >= MAX_INTENTOS:
         cambios["bloqueado_hasta"] = (
-            datetime.now(timezone.utc) + timedelta(minutes=BLOQUEO_MINUTOS)
+            datetime.now(UTC) + timedelta(minutes=BLOQUEO_MINUTOS)
         ).isoformat()
     await _run(
         lambda: client.table(USERS).update(cambios).eq("id", user["id"]).execute()
@@ -198,7 +198,7 @@ async def _registrar_acceso(user: dict) -> None:
         .update({
             "intentos_fallidos": 0,
             "bloqueado_hasta": None,
-            "ultimo_acceso": datetime.now(timezone.utc).isoformat(),
+            "ultimo_acceso": datetime.now(UTC).isoformat(),
         })
         .eq("id", user["id"])
         .execute()
@@ -226,10 +226,10 @@ async def authenticate(email: str, password: str) -> dict:
     if bloqueado:
         try:
             hasta = datetime.fromisoformat(str(bloqueado).replace("Z", "+00:00"))
-            if hasta > datetime.now(timezone.utc):
+            if hasta > datetime.now(UTC):
                 raise AuthError(
-                    f"Cuenta bloqueada temporalmente por intentos fallidos. "
-                    f"Vuelve a intentar en unos minutos."
+                    "Cuenta bloqueada temporalmente por intentos fallidos. "
+                    "Vuelve a intentar en unos minutos."
                 )
         except ValueError:
             pass

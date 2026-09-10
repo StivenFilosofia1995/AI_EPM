@@ -8,10 +8,9 @@ import logging
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-from typing import Optional
 
 from app.config import settings
-from app.services.google_sheets_service import FIELD_KEYS, FIELD_HEADERS
+from app.services.google_sheets_service import FIELD_HEADERS, FIELD_KEYS
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +30,7 @@ _SECTIONS = [
     ),
 ]
 
-_KEY_TO_HEADER = dict(zip(FIELD_KEYS, FIELD_HEADERS))
+_KEY_TO_HEADER = dict(zip(FIELD_KEYS, FIELD_HEADERS, strict=True))
 
 
 # ── HTML builder ─────────────────────────────────────────────────────────────

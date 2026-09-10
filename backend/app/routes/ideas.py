@@ -12,7 +12,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from app.dependencies import get_current_user, limitar_modelo, verify_session_ownership
+from app.dependencies import limitar_modelo, verify_session_ownership
 from app.services import ideas_service
 from app.services.ideas_service import IdeasError
 

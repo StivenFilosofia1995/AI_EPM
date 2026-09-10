@@ -12,18 +12,18 @@ from __future__ import annotations
 
 import time
 from collections import defaultdict
-from typing import Optional
 
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from app.services import auth_service, tree_repository as repo
+from app.services import auth_service
+from app.services import tree_repository as repo
 
 _bearer = HTTPBearer(auto_error=False)
 
 
 async def get_current_user(
-    creds: Optional[HTTPAuthorizationCredentials] = Depends(_bearer),
+    creds: HTTPAuthorizationCredentials | None = Depends(_bearer),
 ) -> dict:
     if creds is None or not creds.credentials:
         raise HTTPException(

@@ -1,13 +1,12 @@
-from typing import Optional
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     # ── LLM — solo se usa en la etapa final de análisis e ideas ───────────────
-    ANTHROPIC_API_KEY: Optional[str] = None
+    ANTHROPIC_API_KEY: str | None = None
     ANTHROPIC_MODEL: str = "claude-haiku-4-5-20251001"
-    ANTHROPIC_BASE_URL: Optional[str] = None
+    ANTHROPIC_BASE_URL: str | None = None
 
     TEMPERATURE: float = 0.3
     MAX_TOKENS: int = 1500
@@ -29,14 +28,14 @@ class Settings(BaseSettings):
     # Opción 1 — archivo local
     SERVICE_ACCOUNT_FILE: str = "service_account.json"
     # Opción 2 — JSON completo como string (Railway)
-    GOOGLE_CREDENTIALS_JSON: Optional[str] = None
+    GOOGLE_CREDENTIALS_JSON: str | None = None
 
     # ── Email ─────────────────────────────────────────────────────────────────
     SMTP_HOST: str = "smtp.gmail.com"
     # Puerto primario. Si STARTTLS falla, el servicio reintenta en 465 con SSL.
     SMTP_PORT: int = 587
-    SMTP_USER: Optional[str] = None
-    SMTP_PASSWORD: Optional[str] = None
+    SMTP_USER: str | None = None
+    SMTP_PASSWORD: str | None = None
 
     # ── App ───────────────────────────────────────────────────────────────────
     APP_NAME: str = "EPM — Consolidación Metodológica"

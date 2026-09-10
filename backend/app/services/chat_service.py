@@ -1,7 +1,7 @@
 import json
 import logging
 import re
-from typing import AsyncGenerator
+from collections.abc import AsyncGenerator
 
 from app.config import settings
 from app.services import supabase_service

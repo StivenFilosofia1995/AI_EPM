@@ -13,7 +13,6 @@ import json
 import logging
 import os
 import re
-from typing import Optional
 
 import gspread
 from google.oauth2.service_account import Credentials
@@ -139,7 +138,7 @@ async def read_all_rows() -> list[dict]:
         return []
 
 
-def _extraer_fila(respuesta: dict) -> Optional[int]:
+def _extraer_fila(respuesta: dict) -> int | None:
     """Fila realmente escrita, tomada del rango que devuelve la operación."""
     rango = (respuesta or {}).get("updates", {}).get("updatedRange", "")
     m = _RANGE_ROW_RE.search(rango)

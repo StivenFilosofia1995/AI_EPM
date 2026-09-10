@@ -36,7 +36,7 @@ async def _check_db() -> dict:
         return {"estado": "ok"}
     except DatabaseUnavailable as exc:
         return {"estado": "sin_configurar", "detalle": str(exc)}
-    except asyncio.TimeoutError:
+    except TimeoutError:
         return {"estado": "lento", "detalle": "La consulta superó los 5 segundos."}
     except Exception as exc:
         return {"estado": "error", "detalle": f"{type(exc).__name__}: {exc}"}

@@ -11,8 +11,7 @@ tiene que enterarse en ese momento, no al final.
 from __future__ import annotations
 
 import asyncio
-import json
-from typing import Any, Optional
+from typing import Any
 
 from app.services.db import get_client
 
@@ -51,7 +50,7 @@ async def create_session(
     return rows[0] if rows else record
 
 
-async def get_session(session_id: str) -> Optional[dict]:
+async def get_session(session_id: str) -> dict | None:
     client = get_client()
     result = await _run(
         lambda: client.table(SESSIONS)
@@ -109,8 +108,8 @@ async def upsert_respuesta(
     user_id: str,
     tree_version: str,
     node_id: str,
-    field_key: Optional[str],
-    valor: Optional[str],
+    field_key: str | None,
+    valor: str | None,
     valor_json: Any = None,
     es_valida: bool = True,
     origen: str = "propio",
@@ -262,7 +261,7 @@ async def project_actividad(session_id: str, user_id: str, campos: dict[str, Any
     return rows[0] if rows else record
 
 
-async def get_actividad(session_id: str) -> Optional[dict]:
+async def get_actividad(session_id: str) -> dict | None:
     client = get_client()
     result = await _run(
         lambda: client.table("v_actividades_export")

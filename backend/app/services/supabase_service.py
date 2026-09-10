@@ -1,6 +1,5 @@
 import asyncio
 import logging
-from typing import Optional
 
 from supabase import Client, create_client
 
@@ -8,7 +7,7 @@ from app.config import settings
 
 logger = logging.getLogger(__name__)
 
-_client: Optional[Client] = None
+_client: Client | None = None
 
 
 def _get_client() -> Client:

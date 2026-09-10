@@ -17,7 +17,7 @@ import json
 import logging
 import re
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from pydantic import BaseModel, ValidationError, field_validator
 
@@ -153,7 +153,7 @@ def _listas_validas() -> str:
 
 async def _guardar(
     session_id: str,
-    user_id: Optional[str],
+    user_id: str | None,
     tipo: str,
     contenido: str,
     prompt_hash: str,
@@ -180,7 +180,7 @@ async def _guardar(
 # ─── Generación ─────────────────────────────────────────────────────────────
 
 
-async def generar_analisis(session_id: str, user_id: Optional[str]) -> dict:
+async def generar_analisis(session_id: str, user_id: str | None) -> dict:
     """
     Genera las cuatro piezas y las guarda en epm_analisis_ia.
 
@@ -208,19 +208,27 @@ async def generar_analisis(session_id: str, user_id: Optional[str]) -> dict:
             texto, tin, tout = await complete(
                 system=sistema, prompt=prompt, temperature=TEMPERATURA, max_tokens=1200
             )
-            salida[tipo] = texto.strip()
-            await _guardar(session_id, user_id, tipo, texto.strip(), prompt_hash, tin, tout)
         except Exception as exc:
             logger.error("Fallo generando %s para %s: %s", tipo, session_id, exc)
             salida[tipo] = None
             salida.setdefault("errores", []).append(f"{tipo}: {exc}")
+            continue
+
+        # El texto ya existe: se devuelve aunque el guardado falle. Antes, un
+        # error de persistencia descartaba un análisis correcto ya generado.
+        salida[tipo] = texto.strip()
+        try:
+            await _guardar(session_id, user_id, tipo, texto.strip(), prompt_hash, tin, tout)
+        except Exception as exc:
+            logger.error("No se pudo guardar %s de %s: %s", tipo, session_id, exc)
+            salida.setdefault("errores", []).append(f"{tipo}: generado pero no guardado ({exc})")
 
     # ── Ideas: JSON estricto, un reintento, luego fallo explícito ──
     prompt_ideas = (
         f"Pieza solicitada: IDEAS\n\n{_listas_validas()}\n\n"
         f"DATOS CONSOLIDADOS DE LA ACTIVIDAD:\n{datos}"
     )
-    ideas: Optional[Ideas] = None
+    ideas: Ideas | None = None
     ultimo_error = ""
 
     for intento in (1, 2):

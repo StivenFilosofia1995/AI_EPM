@@ -13,8 +13,8 @@ reinicio y funciona con varias réplicas sin estado compartido en memoria.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
-from typing import Any, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 from app.domain import fields as F
 from app.domain.tree_loader import Node, Tree, get_tree
@@ -75,7 +75,7 @@ def compute_route(tree: Tree, answers: dict[str, Any]) -> list[str]:
     """
     route: list[str] = []
     seen: set[str] = set()
-    node_id: Optional[str] = tree.root
+    node_id: str | None = tree.root
 
     while node_id and len(route) < MAX_WALK:
         if node_id in seen:
@@ -101,7 +101,7 @@ def project_full_path(tree: Tree, answers: dict[str, Any]) -> list[str]:
     """
     path: list[str] = []
     seen: set[str] = set()
-    node_id: Optional[str] = tree.root
+    node_id: str | None = tree.root
 
     while node_id and len(path) < MAX_WALK:
         if node_id in seen:
@@ -112,7 +112,14 @@ def project_full_path(tree: Tree, answers: dict[str, Any]) -> list[str]:
         node = tree.node(node_id)
         if node.terminal:
             break
-        node_id = node.resolve_next(answers) if node_id in answers else node.default_next
+
+        # resolve_next se llama SIEMPRE, también en nodos sin responder: las
+        # condiciones next_when dependen de las respuestas de OTROS nodos
+        # (por ejemplo, la etapa declarada al inicio decide si el resumen del
+        # bloque 1 cierra la sesión o continúa al bloque 2). Usar default_next
+        # aquí proyectaba los bloques 2 y 3 en sesiones de solo planeación, e
+        # inflaba el denominador del progreso.
+        node_id = node.resolve_next(answers)
 
     return path
 
@@ -480,7 +487,7 @@ async def finalize(session_id: str, user_id: str) -> dict:
         session_id,
         estado=estado,
         # PostgREST no evalúa SQL: hay que enviar la marca de tiempo ya resuelta.
-        completed_at=datetime.now(timezone.utc).isoformat(),
+        completed_at=datetime.now(UTC).isoformat(),
     )
 
     return {

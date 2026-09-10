@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Optional
-
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, EmailStr, Field
 
@@ -88,7 +86,7 @@ class CrearUsuarioBody(BaseModel):
     nombre: str = Field(min_length=3)
     password_temporal: str = Field(min_length=10)
     rol: str = "facilitador"
-    programa: Optional[str] = None
+    programa: str | None = None
 
 
 @router.post("/usuarios", status_code=201)

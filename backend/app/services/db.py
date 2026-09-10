@@ -9,13 +9,11 @@ de Supabase se traducía en pérdida silenciosa de datos del facilitador.
 
 from __future__ import annotations
 
-from typing import Optional
-
 from supabase import Client, create_client
 
 from app.config import settings
 
-_client: Optional[Client] = None
+_client: Client | None = None
 
 
 class DatabaseUnavailable(RuntimeError):

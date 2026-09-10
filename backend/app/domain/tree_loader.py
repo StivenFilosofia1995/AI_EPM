@@ -15,10 +15,11 @@ import hashlib
 import re
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Literal, Optional
+from typing import Any, Literal
 
 import yaml
-from pydantic import BaseModel, Field as PField, model_validator
+from pydantic import BaseModel, model_validator
+from pydantic import Field as PField
 
 from app.domain.fields import CLOSED_OPTIONS, FIELD_KEYS, InputType
 
@@ -51,7 +52,7 @@ class Condition(BaseModel):
     value: str | float
 
     @classmethod
-    def parse(cls, raw: str) -> "Condition":
+    def parse(cls, raw: str) -> Condition:
         m = _CONDITION_RE.match(raw)
         if not m:
             raise TreeError(
@@ -99,8 +100,8 @@ class Condition(BaseModel):
 
 class Option(BaseModel):
     value: str
-    next: Optional[str] = None
-    help: Optional[str] = None
+    next: str | None = None
+    help: str | None = None
     # Arista de corrección: excluida de la detección de ciclos.
     revisit: bool = False
 
@@ -113,8 +114,8 @@ class Compose(BaseModel):
 
 class Validation(BaseModel):
     type: str
-    value: Optional[Any] = None
-    node: Optional[str] = None
+    value: Any | None = None
+    node: str | None = None
 
 
 class NextWhen(BaseModel):
@@ -122,7 +123,7 @@ class NextWhen(BaseModel):
     goto: str
 
     @classmethod
-    def from_raw(cls, raw: dict) -> "NextWhen":
+    def from_raw(cls, raw: dict) -> NextWhen:
         if "if" not in raw or "goto" not in raw:
             raise TreeError(f"next_when requiere 'if' y 'goto': {raw!r}")
         return cls(condition=Condition.parse(str(raw["if"])), goto=str(raw["goto"]))
@@ -137,31 +138,31 @@ class Node(BaseModel):
     node_id: str
     kind: Literal["question", "info", "confirm"] = "question"
     label: str
-    help: Optional[str] = None
-    help_by_answer: Optional[HelpByAnswer] = None
+    help: str | None = None
+    help_by_answer: HelpByAnswer | None = None
     input_type: InputType
     required: bool = True
     persist: bool = True
     terminal: bool = False
 
-    block: Optional[int] = None
-    order: Optional[int] = None
+    block: int | None = None
+    order: int | None = None
 
-    field_key: Optional[str] = None
-    compose: Optional[Compose] = None
+    field_key: str | None = None
+    compose: Compose | None = None
 
     options: list[Option] = PField(default_factory=list)
-    options_from: Optional[str] = None
-    autocomplete_from: Optional[str] = None
+    options_from: str | None = None
+    autocomplete_from: str | None = None
 
     next_when: list[NextWhen] = PField(default_factory=list)
-    default_next: Optional[str] = None
+    default_next: str | None = None
 
     validations: list[Validation] = PField(default_factory=list)
     summary_fields: list[str] = PField(default_factory=list)
 
     @model_validator(mode="after")
-    def _check(self) -> "Node":
+    def _check(self) -> Node:
         if self.field_key and self.compose:
             raise TreeError(
                 f"{self.node_id}: no puede tener field_key y compose a la vez."
@@ -193,7 +194,7 @@ class Node(BaseModel):
             return [Option(value=v) for v in CLOSED_OPTIONS[self.options_from]]
         return self.options
 
-    def help_for(self, answers: dict[str, Any]) -> Optional[str]:
+    def help_for(self, answers: dict[str, Any]) -> str | None:
         """Ayuda contextual según una respuesta previa; si no aplica, la genérica."""
         if self.help_by_answer:
             prev = answers.get(self.help_by_answer.node)
@@ -203,7 +204,7 @@ class Node(BaseModel):
                     return variant
         return self.help
 
-    def resolve_next(self, answers: dict[str, Any]) -> Optional[str]:
+    def resolve_next(self, answers: dict[str, Any]) -> str | None:
         """
         Decide el siguiente nodo. Prioridad:
           1. La opción elegida, si trae `next`.
