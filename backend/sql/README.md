@@ -23,6 +23,7 @@ Todas las migraciones son **idempotentes**: puedes ejecutarlas dos veces sin err
 006_actividades_restricciones.sql
 007_vistas.sql
 008_rls.sql
+009_origen_y_estimado.sql
 ```
 
 El orden importa: 002 añade claves foráneas hacia tablas de 001, 004 referencia a 002, y 007 y 008 dependen de todas las anteriores.
@@ -39,6 +40,7 @@ El orden importa: 002 añade claves foráneas hacia tablas de 001, 004 referenci
 | 006 | `actividades_restricciones` | CHECKs de rango y de opciones cerradas; unicidad de `id_actividad` | 001 |
 | 007 | `vistas` | `v_actividades_completas`, `v_actividades_export`, `v_avance_por_usuario`, `v_campos_problematicos` | 001–005 |
 | 008 | `rls` | RLS activo, políticas de `service_role`, revocación a `anon` y `authenticated` | 001–007 |
+| 009 | `origen_y_estimado` | Columna `origen` en `epm_respuestas`; marca de estimado derivada; `v_uso_sugerencias` | 004, 007 |
 
 ## Decisiones que están incorporadas en este esquema
 
@@ -54,7 +56,7 @@ El orden importa: 002 añade claves foráneas hacia tablas de 001, 004 referenci
 
 ## Cómo revertir
 
-No hay archivos de reversión automática. Al ser una base nueva, la vía más limpia ante un problema es recrear el proyecto de Supabase y volver a ejecutar de 001 a 008.
+No hay archivos de reversión automática. Al ser una base nueva, la vía más limpia ante un problema es recrear el proyecto de Supabase y volver a ejecutar de 001 a 009.
 
 Si necesitas revertir a mano, este es el orden inverso. **Estos comandos destruyen datos**: ejecútalos solo con conocimiento de causa.
 
@@ -63,7 +65,8 @@ Si necesitas revertir a mano, este es el orden inverso. **Estos comandos destruy
 ALTER TABLE public.epm_respuestas DISABLE ROW LEVEL SECURITY;
 -- ... repetir por tabla
 
--- 007: vistas
+-- 009 y 007: vistas
+DROP VIEW IF EXISTS public.v_uso_sugerencias;
 DROP VIEW IF EXISTS public.v_campos_problematicos;
 DROP VIEW IF EXISTS public.v_avance_por_usuario;
 DROP VIEW IF EXISTS public.v_actividades_export;
@@ -118,7 +121,7 @@ WHERE table_schema = 'public' AND table_name LIKE 'epm_%'
 ORDER BY table_name;
 ```
 
-Las vistas, cuatro:
+Las vistas, cinco:
 
 ```sql
 SELECT table_name FROM information_schema.views
