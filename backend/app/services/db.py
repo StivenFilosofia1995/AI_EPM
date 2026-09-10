@@ -1,5 +1,10 @@
 """
-Cliente único de Supabase.
+Cliente de base de datos.
+
+Si SUPABASE_URL está configurada, usa Supabase. Si no, entra en **modo
+demostración** con almacenamiento en memoria, de forma que la aplicación
+funciona completa sin ninguna configuración: árbol, autenticación,
+exportaciones y panel de administración.
 
 A diferencia de supabase_service (legado), los módulos que usan este cliente
 NO tragan las excepciones. Un fallo de base de datos debe ser visible: el
@@ -9,27 +14,54 @@ de Supabase se traducía en pérdida silenciosa de datos del facilitador.
 
 from __future__ import annotations
 
-from supabase import Client, create_client
+import logging
+from typing import Any
 
 from app.config import settings
 
-_client: Client | None = None
+logger = logging.getLogger(__name__)
+
+_client: Any = None
 
 
 class DatabaseUnavailable(RuntimeError):
     """No hay configuración de base de datos, o la conexión falló."""
 
 
-def get_client() -> Client:
+# Valores de .env.example. Si siguen puestos, la variable no está configurada
+# de verdad: conviene entrar en modo demostración en vez de intentar conectarse
+# a una URL inexistente y fallar con un error de red confuso.
+_MARCADORES = ("tu-proyecto", "coloca-aqui", "genera-una", "el-id-de", "cambiame")
+
+
+def _configurada(valor: str | None) -> bool:
+    if not valor or not valor.strip():
+        return False
+    return not any(m in valor for m in _MARCADORES)
+
+
+def modo_demostracion() -> bool:
+    """True cuando no hay Supabase configurado y se usa memoria."""
+    return not (
+        _configurada(settings.SUPABASE_URL)
+        and _configurada(settings.SUPABASE_SERVICE_ROLE_KEY)
+    )
+
+
+def get_client() -> Any:
     global _client
-    if _client is None:
-        if not settings.SUPABASE_URL or not settings.SUPABASE_SERVICE_ROLE_KEY:
-            raise DatabaseUnavailable(
-                "SUPABASE_URL y SUPABASE_SERVICE_ROLE_KEY no están configurados."
-            )
-        _client = create_client(
-            settings.SUPABASE_URL, settings.SUPABASE_SERVICE_ROLE_KEY
-        )
+    if _client is not None:
+        return _client
+
+    if modo_demostracion():
+        from app.services.memory_db import MemoryDB
+
+        _client = MemoryDB()
+        return _client
+
+    from supabase import create_client
+
+    _client = create_client(settings.SUPABASE_URL, settings.SUPABASE_SERVICE_ROLE_KEY)
     return _client
 
 

@@ -47,6 +47,26 @@ Supabase (PostgreSQL)
 
 El estado de avance vive en Supabase, no en memoria del proceso: el sistema sobrevive un reinicio y funciona con varias réplicas.
 
+## Arranque inmediato: modo demostración
+
+Si **no** configuras Supabase, la aplicación arranca igual en modo demostración: los datos viven en memoria y se crea sola una cuenta de administrador.
+
+```bash
+cd backend && python -m uvicorn app.main:app --port 8000
+```
+
+La contraseña aparece en los registros de arranque, en un bloque destacado. Para fijarla entre despliegues, define `ADMIN_EMAIL` y `ADMIN_PASSWORD` como variables de entorno (en Railway: **Variables → New Variable**).
+
+**Por qué no hay una contraseña escrita en el código:** este repositorio es público. Una contraseña fija en el código sería legible por cualquiera y le daría acceso al panel de administración.
+
+Límites del modo demostración, que la aplicación advierte al arrancar:
+
+- Los datos se pierden en cada despliegue.
+- No hay `CHECK`, ni índices únicos, ni triggers: las garantías las da el backend, no Postgres.
+- No sirve con varias réplicas.
+
+Sirve para demostrar y desarrollar. Para uso institucional, configura Supabase.
+
 ## Puesta en marcha
 
 ### 1. Base de datos
@@ -143,12 +163,15 @@ Distinguir lo probado de lo que solo compila:
 - La aplicación importa y registra sus 31 rutas.
 - Ruff sin hallazgos.
 
+**Verificado en navegador**
+- Modo demostración completo: acceso, creación de sesión y avance por el árbol, con las respuestas persistidas.
+- Las dos vistas cargan con sus hojas de estilo y el logotipo institucional.
+
 **No verificado**
 - **Las migraciones SQL no se han ejecutado contra ninguna base de datos.** Están escritas y revisadas, no probadas.
 - No se ha hecho ningún recorrido end-to-end contra un Supabase real.
 - No se ha probado la escritura en Google Sheets ni el envío de correo.
 - No se ha llamado a la API de Anthropic: la etapa de análisis solo se probó con el cliente simulado.
-- El frontend no se ha abierto en un navegador contra un backend en marcha.
 - El despliegue en Railway no se ha reintentado tras estos cambios.
 
 ## Limitaciones conocidas

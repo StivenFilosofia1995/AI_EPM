@@ -51,7 +51,7 @@
 
 <div class="acceso" id="pantallaAcceso">
   <div class="acceso-card">
-    <div class="acceso-logo">epm</div>
+    <div class="acceso-logo" data-logo-epm="34px"></div>
     <h1>Panel de administración</h1>
     <p class="sub">Requiere rol de administrador o coordinador.</p>
     <form id="formAcceso" novalidate>
@@ -71,7 +71,7 @@
 
 <div class="admin-shell oculto" id="app">
   <header class="admin-cab">
-    <div class="marca-logo">epm</div>
+    <div class="marca-logo" data-logo-epm="28px"></div>
     <h1>Panel de administración</h1>
     <span id="usuarioInfo" style="font-size:13px;color:var(--text-dim)"></span>
     <button class="btn" id="btnSalir">Salir</button>
@@ -91,6 +91,7 @@
   <div id="contenido"></div>
 </div>
 
+<script src="/static/js/logo.js"></script>
 <script>
 'use strict';
 const TOKEN_KEY = 'epm_token';

@@ -63,7 +63,9 @@ async function api(ruta, opciones = {}) {
 
   const r = await fetch(ruta, cfg);
 
-  if (r.status === 401) {
+  // Un 401 en el propio login son credenciales incorrectas, no una sesión
+  // expirada: cerrar sesión ahí ocultaba el mensaje real del servidor.
+  if (r.status === 401 && !ruta.startsWith('/api/auth/login')) {
     cerrarSesion(true);
     throw new Error('La sesión expiró. Ingresa de nuevo.');
   }

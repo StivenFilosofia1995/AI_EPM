@@ -2,7 +2,8 @@ import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -17,6 +18,8 @@ from app.routes.health import router as health_router
 from app.routes.ideas import router as ideas_router
 from app.routes.legacy import router as legacy_router
 from app.routes.tree import router as tree_router
+from app.services.bootstrap import asegurar_admin
+from app.services.db import modo_demostracion
 
 logging.basicConfig(
     level=logging.INFO,
@@ -49,6 +52,15 @@ async def lifespan(_: FastAPI):
         )
     if settings.CORS_ORIGINS.strip() == "*":
         logger.warning("CORS_ORIGINS está en '*'. Restringe los orígenes en producción.")
+
+    if modo_demostracion():
+        logger.warning(
+            "SUPABASE_URL no está configurada: se arranca en MODO DEMOSTRACIÓN. "
+            "Los datos viven en memoria y se pierden en cada despliegue. "
+            "Para uso real, configura Supabase y ejecuta sql/esquema_completo.sql."
+        )
+        await asegurar_admin()
+
     yield
 
 
@@ -75,6 +87,40 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type"],
 )
+
+# ─── Errores de validación en español ───────────────────────────────────────
+# Pydantic los emite en inglés y con jerga interna. El usuario final de esta
+# aplicación es un facilitador, no un desarrollador.
+_TRADUCCIONES = {
+    "value is not a valid email address": "El correo no tiene un formato válido.",
+    "field required": "Este dato es obligatorio.",
+    "Field required": "Este dato es obligatorio.",
+    "String should have at least": "El texto es demasiado corto.",
+    "Input should be a valid integer": "Debe ser un número entero.",
+    "Input should be a valid": "El valor no tiene el formato esperado.",
+}
+
+
+def _traducir(mensaje: str) -> str:
+    for clave, es in _TRADUCCIONES.items():
+        if mensaje.startswith(clave) or clave in mensaje:
+            return es
+    return mensaje
+
+
+@app.exception_handler(RequestValidationError)
+async def errores_de_validacion(_: Request, exc: RequestValidationError):
+    detalles = []
+    for e in exc.errors():
+        campo = ".".join(str(p) for p in e.get("loc", ()) if p not in ("body", "query"))
+        detalles.append({
+            "field_key": campo or None,
+            "code": e.get("type", "invalido"),
+            "message": _traducir(str(e.get("msg", ""))),
+        })
+    resumen = " ".join(d["message"] for d in detalles) or "Los datos enviados no son válidos."
+    return JSONResponse(status_code=422, content={"detail": resumen, "errors": detalles})
+
 
 # ─── Rutas de API ───────────────────────────────────────────────────────────
 app.include_router(auth_router)

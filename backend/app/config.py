@@ -1,5 +1,12 @@
 
+from pathlib import Path
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Anclado al directorio backend/, no al directorio de trabajo. Con env_file=
+# ".env" a secas, arrancar uvicorn desde la raiz del repositorio ignoraba
+# el archivo en silencio y la aplicacion levantaba sin configuracion.
+_BACKEND = Path(__file__).resolve().parent.parent
 
 
 class Settings(BaseSettings):
@@ -14,6 +21,15 @@ class Settings(BaseSettings):
     # ── Supabase ──────────────────────────────────────────────────────────────
     SUPABASE_URL: str = ""
     SUPABASE_SERVICE_ROLE_KEY: str = ""
+
+    # ── Cuenta inicial (solo modo demostración, sin Supabase) ─────────────────
+    # Si ADMIN_PASSWORD viene del entorno, la cuenta de administrador se crea
+    # con esa contraseña y queda fija entre despliegues. Si no, se genera una
+    # aleatoria y se anuncia en los registros de arranque.
+    # NUNCA se escribe una contraseña por defecto aquí: el repositorio es
+    # público y quedaría legible por cualquiera.
+    ADMIN_EMAIL: str | None = None
+    ADMIN_PASSWORD: str | None = None
 
     # ── Autenticación (JWT propio) ────────────────────────────────────────────
     # SECRET_KEY firma los tokens de acceso. Cambiarla invalida toda sesión
@@ -57,7 +73,9 @@ class Settings(BaseSettings):
     # Sin esto, copiar .env.example a .env con una variable de más provoca un
     # ValidationError de Pydantic y la aplicación no levanta.
     model_config = SettingsConfigDict(
-        env_file=".env",
+        # El segundo tiene prioridad: permite un .env junto al CWD que
+        # sobrescriba al del backend, útil en desarrollo.
+        env_file=(_BACKEND / ".env", ".env"),
         case_sensitive=True,
         extra="ignore",
     )
