@@ -292,7 +292,7 @@ $('#btnMisSesiones').addEventListener('click', verSesiones);
 async function nuevaSesion() {
   limpiarAvisos();
   vista('vistaNodo');
-  $('#vistaNodo').innerHTML = '<div class="cargando">Creando consolidación…</div>';
+  conversacionCargando('Creando consolidación…');
   try {
     const datos = await api('/api/tree/session', { method: 'POST' });
     SESSION = datos.session_id;
@@ -366,7 +366,7 @@ function vista(id) {
 // ── Nodo actual ──────────────────────────────────────────────────────────
 async function cargarNodoActual() {
   vista('vistaNodo');
-  $('#vistaNodo').innerHTML = '<div class="cargando">Cargando…</div>';
+  conversacionCargando('Cargando tu conversación…');
   const datos = await api(`/api/tree/session/${SESSION}/current`);
   pintarNodo(datos);
 }
@@ -387,102 +387,169 @@ function pintarProgreso(progress) {
   }
 }
 
-function pintarNodo(datos) {
-  NODO = datos.node;
-  pintarProgreso(datos.progress);
-  vista('vistaNodo');
+// ── Conversación ─────────────────────────────────────────────────────────
+// El hilo se reconstruye SIEMPRE desde lo que devuelve el backend, nunca
+// desde memoria del navegador: al recargar, la conversación reaparece igual.
 
-  const cont = $('#vistaNodo');
-  cont.innerHTML = '';
-
-  // Cabecera
-  const cab = el('div', { class: 'nodo-cabecera' });
-  if (NODO.block) {
-    cab.appendChild(el('span', { class: 'pastilla', text: `Bloque ${NODO.block}` }));
-    cab.appendChild(el('span', { text: NODO.block_name }));
+function asegurarConversacion() {
+  // vistaNodo debe conservar #hilo y #dock: escribir innerHTML sobre la
+  // sección los destruía y el siguiente pintado fallaba con null.
+  const seccion = $('#vistaNodo');
+  if (!$('#hilo')) {
+    seccion.className = 'conversacion';
+    seccion.replaceChildren(
+      el('div', { class: 'hilo', id: 'hilo', 'aria-live': 'polite',
+                  'aria-label': 'Conversación' }),
+      el('div', { class: 'dock', id: 'dock' }));
   }
-  cab.appendChild(el('span', { text: `· ${datos.progress.respondidos} de ${datos.progress.total}` }));
-  cont.appendChild(cab);
+  return { hilo: $('#hilo'), dock: $('#dock') };
+}
 
-  cont.appendChild(el('h1', { class: 'nodo-pregunta', id: 'etiquetaNodo', text: NODO.label }));
-  if (NODO.help) cont.appendChild(el('p', { class: 'nodo-ayuda', text: NODO.help }));
+function conversacionCargando(texto) {
+  const { hilo, dock } = asegurarConversacion();
+  dock.replaceChildren();
+  hilo.replaceChildren(el('div', { class: 'cargando', text: texto }));
+}
 
-  // Resumen de coherencia, si el nodo lo trae
-  if (NODO.resumen && NODO.resumen.length) {
+function burbuja(rol, contenido, ayuda) {
+  const texto = el('div', { class: 'texto' }, contenido);
+  if (ayuda) texto.appendChild(el('span', { class: 'ayuda', text: ayuda }));
+  return el('div', { class: `burbuja ${rol}` },
+    el('div', { class: 'avatar', text: rol === 'bot' ? 'EPM' : 'TÚ' }),
+    texto);
+}
+
+function pintarHilo(historial, nodo) {
+  const { hilo } = asegurarConversacion();
+  hilo.replaceChildren();
+
+  hilo.appendChild(burbuja('bot',
+    `Hola, ${USUARIO?.nombre?.split(' ')[0] || 'bienvenido'}. Vamos a consolidar tu actividad paso a paso. Puedes devolverte cuando quieras y todo se guarda solo.`));
+
+  let bloqueActual = null;
+  for (const paso of historial || []) {
+    if (paso.block && paso.block !== bloqueActual) {
+      bloqueActual = paso.block;
+      hilo.appendChild(el('div', { class: 'separador-bloque',
+        text: `Bloque ${paso.block} · ${paso.block_name}` }));
+    }
+    hilo.appendChild(burbuja('bot', paso.label));
+    if (paso.valor) hilo.appendChild(burbuja('persona', paso.valor));
+  }
+
+  if (nodo.block && nodo.block !== bloqueActual) {
+    hilo.appendChild(el('div', { class: 'separador-bloque',
+      text: `Bloque ${nodo.block} · ${nodo.block_name}` }));
+  }
+
+  // Resumen de coherencia, si el nodo lo trae.
+  if (nodo.resumen && nodo.resumen.length) {
     const caja = el('div', { class: 'resumen-caja' });
-    for (const r of NODO.resumen) {
+    for (const r of nodo.resumen) {
       const vacio = !r.valor;
       caja.appendChild(el('div', { class: 'resumen-item' },
         el('div', { class: 'clave', text: r.header }),
         el('div', { class: `valor ${vacio ? 'vacio' : ''}`,
                     text: vacio ? 'Sin diligenciar' : r.valor })));
     }
-    cont.appendChild(caja);
+    hilo.appendChild(burbuja('bot', el('div', {}, el('div', { text: nodo.label }), caja), nodo.help));
+  } else {
+    hilo.appendChild(burbuja('bot', nodo.label, nodo.help));
   }
 
-  // Nodo terminal
+  hilo.scrollTop = hilo.scrollHeight;
+}
+
+function pintarNodo(datos) {
+  NODO = datos.node;
+  pintarProgreso(datos.progress);
+  vista('vistaNodo');
+  pintarHilo(datos.historial, NODO);
+  pintarDock(datos);
+}
+
+function pintarDock(datos) {
+  const { dock } = asegurarConversacion();
+  dock.replaceChildren();
+
   if (NODO.terminal) {
-    cont.appendChild(el('div', { class: 'acciones' },
-      el('button', { class: 'btn btn-primario', onclick: verResumen, text: 'Revisar los 25 campos' }),
-      el('div', { class: 'espaciador' }),
-      el('button', { class: 'btn', onclick: retroceder, text: 'Volver atrás' })));
+    dock.appendChild(el('div', { class: 'chips' },
+      el('button', { class: 'chip elegido', onclick: verResumen,
+                     text: 'Revisar los 25 campos' }),
+      el('button', { class: 'chip', onclick: retroceder, text: 'Volver atrás' })));
     return;
   }
 
-  // Control de entrada
-  const zona = el('div', { id: 'zonaEntrada' });
-  zona.appendChild(construirEntrada(NODO));
-  cont.appendChild(zona);
-
-  cont.appendChild(el('div', { id: 'errorCampo', role: 'alert', 'aria-live': 'assertive' }));
-
-  // Sugerencia asistida
-  if (CAMPOS_SUGERIBLES.has(NODO.field_key) &&
-      ['text', 'textarea'].includes(NODO.input_type)) {
-    cont.appendChild(el('div', { class: 'sugerir-barra' },
-      el('button', { class: 'btn-sugerir', id: 'btnSugerir', type: 'button',
-                     onclick: pedirSugerencia, text: 'Sugerir mejora' }),
-      el('span', { class: 'sugerir-nota',
-                   text: 'Opcional. Reformula lo que ya escribiste; nunca rellena solo.' })));
-    cont.appendChild(el('div', { id: 'zonaSugerencias', class: 'sugerencias' }));
+  // Selección única: una pulsación responde y avanza, como en un chat.
+  if (NODO.input_type === 'single_select') {
+    const chips = el('div', { class: 'chips' });
+    for (const o of NODO.options) {
+      const b = el('button', {
+        class: 'chip' + (NODO.previous_value === o.value ? ' elegido' : ''),
+        type: 'button',
+        onclick: () => enviarRespuesta(0, o.value),
+      }, el('span', {}, o.value));
+      if (o.help) b.appendChild(el('small', { text: o.help }));
+      chips.appendChild(b);
+    }
+    dock.appendChild(chips);
+    dock.appendChild(pieDock(datos));
+    return;
   }
 
-  // Acciones
-  cont.appendChild(el('div', { class: 'acciones' },
-    el('button', { class: 'btn', id: 'btnAtras', onclick: retroceder,
-                   disabled: !datos.can_go_back, text: 'Atrás' }),
-    el('button', { class: 'btn btn-primario', id: 'btnContinuar',
-                   onclick: enviarRespuesta, text: 'Continuar' }),
-    el('div', { class: 'espaciador' }),
-    el('span', { class: 'guardado', id: 'indicadorGuardado', text: 'Guardado automático' }),
-  ));
+  // Sugerencia de código, cuando el backend la calcula.
+  if (NODO.sugerencia) {
+    dock.appendChild(el('div', { class: 'sugerencia-codigo' },
+      el('span', { text: 'Te propongo:' }),
+      el('code', { text: NODO.sugerencia }),
+      el('button', { class: 'chip', type: 'button',
+        onclick: () => { const i = $('#entrada'); i.value = NODO.sugerencia; i.focus(); },
+        text: 'Usar este' }),
+      el('span', { class: 'nota-prov',
+        text: 'Código provisional generado por el sistema. Si la Fundación ya tiene una nomenclatura oficial, escríbela en su lugar.' })));
+  }
 
-  const primero = cont.querySelector('input, textarea, select');
+  dock.appendChild(construirEntrada(NODO));
+
+  // Sugerencia asistida de redacción.
+  if (CAMPOS_SUGERIBLES.has(NODO.field_key) &&
+      ['text', 'textarea'].includes(NODO.input_type)) {
+    dock.appendChild(el('div', { class: 'sugerir-barra' },
+      el('button', { class: 'btn-sugerir', id: 'btnSugerir', type: 'button',
+                     onclick: pedirSugerencia, text: 'Ayúdame a redactarlo' }),
+      el('span', { class: 'sugerir-nota',
+                   text: 'Reformula lo que ya escribiste. Nunca lo rellena solo.' })));
+    dock.appendChild(el('div', { id: 'zonaSugerencias', class: 'sugerencias' }));
+  }
+
+  dock.appendChild(el('div', { id: 'errorCampo', role: 'alert', 'aria-live': 'assertive' }));
+  dock.appendChild(pieDock(datos, true));
+
+  const primero = dock.querySelector('input:not([type=checkbox]), textarea');
   if (primero) primero.focus();
+}
+
+function pieDock(datos, conEnviar = false) {
+  const fila = el('div', { class: 'acciones' },
+    el('button', { class: 'btn', id: 'btnAtras', onclick: retroceder,
+                   disabled: !datos.can_go_back, text: 'Atrás' }));
+  if (conEnviar) {
+    fila.appendChild(el('button', { class: 'btn btn-primario', id: 'btnContinuar',
+                                    onclick: () => enviarRespuesta(), text: 'Responder' }));
+  }
+  fila.appendChild(el('div', { class: 'espaciador' }));
+  fila.appendChild(el('span', { class: 'guardado', id: 'indicadorGuardado',
+                                text: 'Guardado automático' }));
+  return fila;
 }
 
 function construirEntrada(nodo) {
   const previo = nodo.previous_value;
 
-  if (nodo.input_type === 'single_select') {
-    const caja = el('div', { class: 'opciones', role: 'radiogroup',
-                             'aria-labelledby': 'etiquetaNodo' });
-    nodo.options.forEach((o, i) => {
-      const id = `op_${i}`;
-      caja.appendChild(el('label', { class: 'opcion', for: id },
-        el('input', { type: 'radio', name: 'respuesta', id, value: o.value,
-                      checked: previo === o.value }),
-        el('span', { class: 'opcion-texto' },
-          el('b', { text: o.value }),
-          o.help ? el('small', { text: o.help }) : null)));
-    });
-    return caja;
-  }
-
   if (nodo.input_type === 'multi_select') {
     const previos = Array.isArray(previo) ? previo : [];
     const caja = el('div', { class: 'opciones opciones-multi', role: 'group',
-                             'aria-labelledby': 'etiquetaNodo' });
+                             'aria-label': nodo.label });
     nodo.options.forEach((o, i) => {
       const id = `op_${i}`;
       caja.appendChild(el('label', { class: 'opcion', for: id },
@@ -494,8 +561,9 @@ function construirEntrada(nodo) {
   }
 
   if (nodo.input_type === 'textarea') {
-    const ta = el('textarea', { class: 'respuesta', id: 'entrada',
-                                'aria-labelledby': 'etiquetaNodo', rows: 6 });
+    const ta = el('textarea', { class: 'respuesta', id: 'entrada', rows: 4,
+                                'aria-label': nodo.label,
+                                placeholder: 'Escribe tu respuesta…' });
     ta.value = previo || '';
     const contador = el('div', { class: 'contador', id: 'contador' });
     const actualizar = () => {
@@ -504,35 +572,34 @@ function construirEntrada(nodo) {
       contador.classList.toggle('corto', n > 0 && n < 15);
     };
     ta.addEventListener('input', actualizar);
-    const envoltorio = el('div', {}, ta, contador);
+    // Ctrl+Enter envía, como en cualquier chat.
+    ta.addEventListener('keydown', e => {
+      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); enviarRespuesta(); }
+    });
+    const envoltorio = el('div', { class: 'campo' }, ta, contador);
     actualizar();
     return envoltorio;
   }
 
+  let inp;
   if (nodo.input_type === 'date') {
-    const inp = el('input', { type: 'date', class: 'respuesta', id: 'entrada',
-                              'aria-labelledby': 'etiquetaNodo' });
-    inp.value = previo || '';
-    return el('div', { class: 'campo' }, inp);
+    inp = el('input', { type: 'date', class: 'respuesta', id: 'entrada',
+                        'aria-label': nodo.label });
+  } else if (nodo.input_type === 'integer' || nodo.input_type === 'percent') {
+    inp = el('input', { type: 'number', class: 'respuesta', id: 'entrada',
+                        inputmode: 'numeric', 'aria-label': nodo.label, min: 0,
+                        max: nodo.input_type === 'percent' ? 100 : null });
+  } else {
+    inp = el('input', { type: 'text', class: 'respuesta', id: 'entrada',
+                        'aria-label': nodo.label, autocomplete: 'off',
+                        placeholder: 'Escribe tu respuesta…' });
   }
+  if (previo !== null && previo !== undefined) inp.value = previo;
+  inp.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); enviarRespuesta(); }
+  });
 
-  if (nodo.input_type === 'integer' || nodo.input_type === 'percent') {
-    const inp = el('input', {
-      type: 'number', class: 'respuesta', id: 'entrada', inputmode: 'numeric',
-      'aria-labelledby': 'etiquetaNodo',
-      min: nodo.input_type === 'percent' ? 0 : 0,
-      max: nodo.input_type === 'percent' ? 100 : null,
-    });
-    if (previo !== null && previo !== undefined) inp.value = previo;
-    return el('div', { class: 'campo' }, inp);
-  }
-
-  // text y duration
-  const inp = el('input', { type: 'text', class: 'respuesta', id: 'entrada',
-                            'aria-labelledby': 'etiquetaNodo', autocomplete: 'off' });
-  inp.value = previo || '';
   const envoltorio = el('div', { class: 'campo' }, inp);
-
   if (nodo.autocomplete && nodo.autocomplete.length) {
     const listaId = 'sugerencias_' + nodo.node_id;
     inp.setAttribute('list', listaId);
@@ -545,10 +612,6 @@ function construirEntrada(nodo) {
 
 function leerValor() {
   if (!NODO) return null;
-  if (NODO.input_type === 'single_select') {
-    const sel = document.querySelector('input[name="respuesta"]:checked');
-    return sel ? sel.value : null;
-  }
   if (NODO.input_type === 'multi_select') {
     return Array.from(document.querySelectorAll('input[name="respuesta"]:checked'))
                 .map(i => i.value);
@@ -564,31 +627,53 @@ function indicador(estado, texto) {
   n.textContent = texto;
 }
 
-async function enviarRespuesta(reintento = 0) {
+async function enviarRespuesta(reintento = 0, valorDirecto = undefined) {
   if (ENVIANDO) return;
   ENVIANDO = true;
 
   const btn = $('#btnContinuar');
   if (btn) btn.disabled = true;
-  $('#errorCampo').innerHTML = '';
+  const caja = $('#errorCampo');
+  if (caja) caja.innerHTML = '';
   indicador('enviando', 'Guardando…');
 
   const origen = window.__origenSugerencia || 'propio';
+  const valor = valorDirecto !== undefined ? valorDirecto : leerValor();
+
+  // La respuesta aparece de inmediato en el hilo; si el backend la
+  // rechaza, se repinta desde lo que él diga y la burbuja desaparece.
+  const textoPropio = Array.isArray(valor) ? valor.join('; ') : String(valor ?? '');
+  if (textoPropio.trim()) {
+    const hilo = $('#hilo');
+    hilo.appendChild(burbuja('persona', textoPropio));
+    hilo.appendChild(el('div', { class: 'burbuja bot', id: 'pensando' },
+      el('div', { class: 'avatar', text: 'EPM' }),
+      el('div', { class: 'escribiendo' }, el('span'), el('span'), el('span'))));
+    hilo.scrollTop = hilo.scrollHeight;
+  }
 
   try {
     const datos = await api(`/api/tree/session/${SESSION}/answer`, {
       method: 'POST',
-      body: { node_id: NODO.node_id, value: leerValor(), origen },
+      body: { node_id: NODO.node_id, value: valor, origen },
     });
     window.__origenSugerencia = null;
     indicador('ok', 'Guardado');
     limpiarAvisos();
     pintarNodo(datos);
   } catch (ex) {
+    document.getElementById('pensando')?.remove();
     if (ex.status === 422 && ex.detalle && Array.isArray(ex.detalle.errors)) {
       indicador('error', 'No guardado');
-      const caja = $('#errorCampo');
+      const hilo = $('#hilo');
+      // Se retira la burbuja optimista: esa respuesta no quedó guardada.
+      hilo.querySelectorAll('.burbuja.persona')[hilo.querySelectorAll('.burbuja.persona').length - 1]?.remove();
       for (const e of ex.detalle.errors) {
+        hilo.appendChild(burbuja('bot', e.message));
+      }
+      hilo.scrollTop = hilo.scrollHeight;
+      const caja = $('#errorCampo');
+      if (caja) for (const e of ex.detalle.errors) {
         caja.appendChild(el('div', { class: 'campo-error', text: e.message }));
       }
     } else if (!ex.status && reintento < 2) {
@@ -596,7 +681,7 @@ async function enviarRespuesta(reintento = 0) {
       indicador('enviando', `Sin conexión. Reintentando (${reintento + 1}/2)…`);
       ENVIANDO = false;
       if (btn) btn.disabled = false;
-      setTimeout(() => enviarRespuesta(reintento + 1), 1500 * (reintento + 1));
+      setTimeout(() => enviarRespuesta(reintento + 1, valorDirecto), 1500 * (reintento + 1));
       return;
     } else {
       indicador('error', 'No guardado');

@@ -121,10 +121,10 @@ async def _preparar_sesion(cliente, monkeypatch):
     """Sesión mínima con datos, para que el análisis tenga de dónde partir."""
     cliente.table("epm_respuestas").filas.extend([
         {"id": "1", "session_id": "s1", "node_id": "q05_nombre", "field_key": "nombre",
-         "valor": "Taller de agua", "stale": False, "es_valida": True, "tree_version": "1.0.0"},
+         "valor": "Taller de agua", "stale": False, "es_valida": True, "tree_version": "1.1.0"},
         {"id": "2", "session_id": "s1", "node_id": "q13_metodologia", "field_key": "metodologia",
          "valor": "Aprendizaje basado en preguntas", "stale": False, "es_valida": True,
-         "tree_version": "1.0.0"},
+         "tree_version": "1.1.0"},
     ])
 
 

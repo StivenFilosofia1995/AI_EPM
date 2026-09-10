@@ -162,6 +162,41 @@ def compute_progress(tree: Tree, answers: dict[str, Any]) -> dict:
     }
 
 
+# ─── Sugerencias calculadas ─────────────────────────────────────────────────
+
+
+async def sugerir_id_actividad(answers: dict[str, Any]) -> str | None:
+    """
+    Propone un código a partir del programa ya elegido y del año en curso,
+    con un consecutivo tomado de lo ya registrado.
+
+    PROVISIONAL: no es la nomenclatura institucional, que todavía no se ha
+    entregado. Se le presenta al facilitador como propuesta editable, nunca
+    se impone. Cuando llegue el patrón oficial, se reemplaza esta función.
+    """
+    programa = answers.get("q02_programa")
+    prefijo = F.PROGRAMA_PREFIJOS.get(str(programa), F.PREFIJO_POR_DEFECTO)
+    anio = datetime.now(UTC).year
+    base = f"{prefijo}-{anio}-"
+
+    try:
+        existentes = await repo.ids_con_prefijo(base)
+    except Exception as exc:
+        logger.warning("No se pudo calcular el consecutivo: %s", exc)
+        existentes = []
+
+    consecutivos = []
+    for valor in existentes:
+        cola = valor[len(base):]
+        if cola.isdigit():
+            consecutivos.append(int(cola))
+
+    return f"{base}{max(consecutivos, default=0) + 1:03d}"
+
+
+_GENERADORES = {"id_actividad": sugerir_id_actividad}
+
+
 # ─── Serialización de un nodo para el frontend ──────────────────────────────
 
 
@@ -181,6 +216,13 @@ async def _node_payload(
             autocomplete = await repo.valores_distintos(node.autocomplete_from)
         except Exception as exc:  # el autocompletado nunca debe bloquear
             logger.warning("Autocompletado no disponible para %s: %s", node.node_id, exc)
+
+    sugerencia = None
+    if node.suggest and node.suggest in _GENERADORES and previous_value is None:
+        try:
+            sugerencia = await _GENERADORES[node.suggest](answers)
+        except Exception as exc:  # una sugerencia nunca debe bloquear
+            logger.warning("Sugerencia no disponible para %s: %s", node.node_id, exc)
 
     resumen = None
     if node.summary_fields:
@@ -207,9 +249,39 @@ async def _node_payload(
         "field_key": node.field_key or (node.compose.target if node.compose else None),
         "options": options,
         "autocomplete": autocomplete,
+        "sugerencia": sugerencia,
         "resumen": resumen,
         "previous_value": previous_value,
     }
+
+
+def _texto_legible(node: Node, valor: Any) -> str:
+    """Cómo se muestra una respuesta ya dada en el hilo de la conversación."""
+    if valor is None:
+        return ""
+    if isinstance(valor, list):
+        return F.serialize_multi(valor)
+    return str(valor)
+
+
+def construir_historial(tree: Tree, answers: dict[str, Any], route: list[str]) -> list[dict]:
+    """
+    Preguntas ya respondidas, en el orden en que se recorrieron.
+
+    Permite repintar la conversación completa al recargar la página: el hilo
+    se reconstruye desde lo guardado, no desde memoria del navegador.
+    """
+    historial = []
+    for node_id in route[:-1] if route else []:
+        node = tree.node(node_id)
+        historial.append({
+            "node_id": node_id,
+            "label": node.label,
+            "valor": _texto_legible(node, answers.get(node_id)),
+            "block": node.block,
+            "block_name": F.BLOCK_NAMES.get(node.block or 0, ""),
+        })
+    return historial
 
 
 # ─── Composición de los 25 campos ───────────────────────────────────────────
@@ -269,6 +341,7 @@ async def start_session(session_id: str, user_id: str, user_name: str) -> dict:
         "session_id": session_id,
         "tree_version": tree.version,
         "node": await _node_payload(tree, root, {}),
+        "historial": [],
         "progress": compute_progress(tree, {}),
         "can_go_back": False,
         "estado": "en_progreso",
@@ -295,6 +368,7 @@ async def get_current_node(session_id: str) -> dict:
         "session_id": session_id,
         "tree_version": session.get("tree_version") or tree.version,
         "node": await _node_payload(tree, node, answers, previous),
+        "historial": construir_historial(tree, answers, route),
         "progress": compute_progress(tree, answers),
         "can_go_back": len(route) > 1,
         "estado": session.get("estado", "en_progreso"),
@@ -479,8 +553,11 @@ async def finalize(session_id: str, user_id: str) -> dict:
     answers = _answers(tree, rows)
     compuesto = compose_fields(tree, answers)
 
-    etapa = answers.get("q00_etapa")
-    estado = "planeada" if etapa == "En planeación" else "completada"
+    # q00_etapa es el nodo de la versión 1.0.0 del árbol; se consulta como
+    # respaldo para sesiones capturadas antes del cambio de apertura.
+    intencion = answers.get("q00_intencion") or answers.get("q00_etapa")
+    planeada = str(intencion).startswith("Planear") or intencion == "En planeación"
+    estado = "planeada" if planeada else "completada"
 
     await repo.project_actividad(session_id, user_id, _coerce_for_db(compuesto))
     await repo.update_session(

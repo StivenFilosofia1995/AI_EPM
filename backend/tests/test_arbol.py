@@ -136,7 +136,7 @@ def test_detecta_ciclo_no_marcado_como_revisit(datos_yaml):
         "input_type": "text",
         "required": False,
         "next_when": [{"if": "q05b_bucle == 'volver'", "goto": "q05_nombre"}],
-        "default_next": "q06_publico",
+        "default_next": "q01_id_actividad",
     })
     with pytest.raises(TreeError, match="Ciclo detectado"):
         validate_tree(_arbol_desde(d))
@@ -166,12 +166,12 @@ def test_rechaza_field_key_fuera_del_contrato(datos_yaml):
 @pytest.mark.parametrize(
     "expresion,respuestas,esperado",
     [
-        ("q00_etapa == 'En planeación'", {"q00_etapa": "En planeación"}, True),
-        ("q00_etapa == 'En planeación'", {"q00_etapa": "Ya ejecutada"}, False),
+        ("q00_intencion == 'Planear una actividad que voy a realizar'", {"q00_intencion": "Planear una actividad que voy a realizar"}, True),
+        ("q00_intencion == 'Planear una actividad que voy a realizar'", {"q00_intencion": "Consolidar una actividad que ya realicé"}, False),
         ("q27_porcentaje_cumplimiento < 60", {"q27_porcentaje_cumplimiento": 59}, True),
         ("q27_porcentaje_cumplimiento < 60", {"q27_porcentaje_cumplimiento": 60}, False),
         ("q27_porcentaje_cumplimiento < 60", {}, False),
-        ("q00_etapa != 'Ya ejecutada'", {"q00_etapa": "En planeación"}, True),
+        ("q00_intencion != 'Consolidar una actividad que ya realicé'", {"q00_intencion": "Planear una actividad que voy a realizar"}, True),
     ],
 )
 def test_evaluacion_de_condiciones(expresion, respuestas, esperado):
@@ -218,7 +218,7 @@ def _campos(arbol, ruta: list[str]) -> set[str]:
 
 
 BASE_EJECUTADA = {
-    "q00_etapa": "Ya ejecutada",
+    "q00_intencion": "Consolidar una actividad que ya realicé",
     "q06_publico": "Adultos",
     "n17_resumen_bloque1": "Sí, el diseño es coherente",
     "q23_instrumento_evaluativo": "Encuesta",
@@ -229,7 +229,7 @@ BASE_EJECUTADA = {
 def test_rama_planeacion_solo_recorre_el_bloque_1(arbol):
     ruta = _recorrer(arbol, {
         **BASE_EJECUTADA,
-        "q00_etapa": "En planeación",
+        "q00_intencion": "Planear una actividad que voy a realizar",
         "q04_tipo_actividad": "Taller",
     })
     assert ruta[-1] == "n18_fin_planeada"

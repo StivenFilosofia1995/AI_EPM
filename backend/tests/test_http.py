@@ -163,15 +163,15 @@ def test_recorrido_basico_del_arbol(app_cliente):
     assert sesion.status_code == 201, sesion.text
     datos = sesion.json()
     session_id = datos["session_id"]
-    assert datos["node"]["node_id"] == "q00_etapa"
+    assert datos["node"]["node_id"] == "q00_intencion"
 
     r = app_cliente.post(
         f"/api/tree/session/{session_id}/answer",
         headers=cabeceras,
-        json={"node_id": "q00_etapa", "value": "Ya ejecutada"},
+        json={"node_id": "q00_intencion", "value": "Consolidar una actividad que ya realicé"},
     )
     assert r.status_code == 200, r.text
-    assert r.json()["node"]["node_id"] == "q01_id_actividad"
+    assert r.json()["node"]["node_id"] == "q02_programa"
 
 
 def test_una_respuesta_invalida_devuelve_errores_estructurados(app_cliente):
@@ -182,7 +182,7 @@ def test_una_respuesta_invalida_devuelve_errores_estructurados(app_cliente):
     r = app_cliente.post(
         f"/api/tree/session/{session_id}/answer",
         headers=cabeceras,
-        json={"node_id": "q00_etapa", "value": "Etapa inventada"},
+        json={"node_id": "q00_intencion", "value": "Etapa inventada"},
     )
     assert r.status_code == 422
     errores = r.json()["detail"]["errors"]

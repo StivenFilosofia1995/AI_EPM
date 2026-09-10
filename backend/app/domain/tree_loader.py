@@ -154,6 +154,8 @@ class Node(BaseModel):
     options: list[Option] = PField(default_factory=list)
     options_from: str | None = None
     autocomplete_from: str | None = None
+    # Nombre del generador de sugerencias que debe calcular el backend.
+    suggest: str | None = None
 
     next_when: list[NextWhen] = PField(default_factory=list)
     default_next: str | None = None

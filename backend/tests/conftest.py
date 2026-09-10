@@ -209,8 +209,8 @@ def sesion(cliente):
         "session_id": sid,
         "user_id": uid,
         "user_name": "Facilitadora de prueba",
-        "tree_version": "1.0.0",
-        "current_node_id": "q00_etapa",
+        "tree_version": "1.1.0",
+        "current_node_id": "q00_intencion",
         "estado": "en_progreso",
     })
     return {"session_id": sid, "user_id": uid}

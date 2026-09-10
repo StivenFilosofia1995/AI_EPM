@@ -22,9 +22,9 @@
 #                para trazabilidad pero no llega a las 25 columnas.
 # ═══════════════════════════════════════════════════════════════════════════
 
-version: "1.0.0"
+version: "1.1.0"
 nombre: "Consolidación metodológica EPM"
-root: q00_etapa
+root: q00_intencion
 
 nodes:
 
@@ -33,48 +33,32 @@ nodes:
   # Evita exportar un Excel con los bloques 2 y 3 vacíos.
   # ═════════════════════════════════════════════════════════════════════════
 
-  - node_id: q00_etapa
+  - node_id: q00_intencion
     kind: question
     block: 1
     order: 0
-    label: "¿En qué etapa se encuentra la actividad?"
+    label: "¿Qué quieres hacer hoy?"
     help: >-
-      Si la actividad aún no se ha realizado, registramos solo el diseño
-      metodológico y podrás retomar la consolidación más adelante para
-      completar la ejecución y la evaluación.
+      Empecemos por ahí. Según lo que elijas, te acompaño por el recorrido
+      que corresponde y no te pregunto nada que no aplique.
     input_type: single_select
     required: true
     options:
-      - value: "En planeación"
-        help: "Solo el bloque 1. La sesión queda guardada como planeada."
-      - value: "Ya ejecutada"
-        help: "Los tres bloques: diseño, ejecución y evaluación."
-    default_next: q01_id_actividad
+      - value: "Planear una actividad que voy a realizar"
+        help: >-
+          Registramos el diseño metodológico. Cuando la ejecutes, retomas
+          esta misma consolidación para completar el resto.
+      - value: "Consolidar una actividad que ya realicé"
+        help: >-
+          Recorremos los tres bloques: diseño, informe de ejecución y
+          evaluación.
+    default_next: q02_programa
     validations:
       - type: in_options
 
   # ═════════════════════════════════════════════════════════════════════════
   # BLOQUE 1 — Identificación y diseño metodológico
   # ═════════════════════════════════════════════════════════════════════════
-
-  - node_id: q01_id_actividad
-    field_key: id_actividad
-    block: 1
-    order: 1
-    label: "¿Cuál es el identificador único de esta actividad?"
-    # TODO: no hay patrón institucional confirmado. Solo se valida unicidad y
-    # longitud mínima. Cuando EPM entregue el patrón real, añadir la validación
-    # de formato aquí y el CHECK en la migración 006.
-    help: >-
-      Debe ser único: no puede repetirse con el de otra actividad ya
-      registrada.
-    input_type: text
-    required: true
-    default_next: q02_programa
-    validations:
-      - type: min_length
-        value: 3
-      - type: unique_id_actividad
 
   - node_id: q02_programa
     field_key: programa
@@ -187,14 +171,38 @@ nodes:
     field_key: nombre
     block: 1
     order: 5
-    label: "¿Cuál es el nombre oficial de la actividad?"
-    help: "Debe ser claro, pedagógico y fácil de identificar."
+    label: "¿Cómo se llama la actividad?"
+    help: "Un nombre claro y fácil de reconocer después en la hoja consolidada."
     input_type: text
     required: true
+    default_next: q01_id_actividad
+    validations:
+      - type: min_length
+        value: 3
+
+  # El identificador va aquí, y no al principio, porque solo en este punto
+  # conocemos el programa y el nombre: con eso se puede proponer un código
+  # con sentido en vez de pedirlo en frío.
+  - node_id: q01_id_actividad
+    field_key: id_actividad
+    block: 1
+    order: 1
+    label: "¿Con qué código quieres identificar esta actividad?"
+    # TODO: no hay patrón institucional confirmado. La sugerencia que calcula
+    # el backend es PROVISIONAL y se marca como tal ante el usuario. Cuando la
+    # Fundación entregue el patrón real, reemplazar sugerir_id_actividad() y
+    # añadir la validación de formato aquí y el CHECK en la migración 006.
+    help: >-
+      Te propongo uno abajo. Puedes usarlo tal cual o escribir el código
+      institucional si ya lo tienes. Solo debe ser único.
+    input_type: text
+    required: true
+    suggest: id_actividad
     default_next: q06_publico
     validations:
       - type: min_length
         value: 3
+      - type: unique_id_actividad
 
   # ═════════════════════════════════════════════════════════════════════════
   # RAMIFICACIÓN 2 — publico condiciona publico_especifico
@@ -474,7 +482,7 @@ nodes:
         revisit: true
     # Si el diseño se confirma, la etapa decide si termina aquí o sigue.
     next_when:
-      - if: "q00_etapa == 'En planeación'"
+      - if: "q00_intencion == 'Planear una actividad que voy a realizar'"
         goto: n18_fin_planeada
     default_next: q19_logros
     validations:

@@ -272,3 +272,23 @@ async def get_actividad(session_id: str) -> dict | None:
     )
     rows = result.data or []
     return rows[0] if rows else None
+
+
+async def ids_con_prefijo(prefijo: str) -> list[str]:
+    """
+    Identificadores ya registrados que empiezan por un prefijo dado.
+    Sirve para proponer el siguiente consecutivo.
+    """
+    client = get_client()
+    result = await _run(
+        lambda: client.table(RESPUESTAS)
+        .select("valor")
+        .eq("field_key", "id_actividad")
+        .eq("stale", False)
+        .execute()
+    )
+    return [
+        (row.get("valor") or "")
+        for row in (result.data or [])
+        if (row.get("valor") or "").startswith(prefijo)
+    ]

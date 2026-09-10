@@ -16,6 +16,8 @@ from app.services import tree_repository as repo
 
 pytestmark = pytest.mark.asyncio
 
+EJEC = "Consolidar una actividad que ya realicé"
+
 
 async def responder(sesion, node_id, valor, origen="propio"):
     return await engine.submit_answer(
@@ -27,8 +29,7 @@ async def responder(sesion, node_id, valor, origen="propio"):
 async def llegar_a_bloque1(sesion, tipo="Taller", publico="Adultos"):
     """Recorre el bloque 1 completo con respuestas válidas."""
     pasos = [
-        ("q00_etapa", "Ya ejecutada"),
-        ("q01_id_actividad", "ACT-001"),
+        ("q00_intencion", "Consolidar una actividad que ya realicé"),
         ("q02_programa", "Biblioteca_EPM"),
         ("q03_linea_accion", "Educación"),
         ("q04_tipo_actividad", tipo),
@@ -38,7 +39,12 @@ async def llegar_a_bloque1(sesion, tipo="Taller", publico="Adultos"):
     elif tipo == "Itinerancia":
         pasos += [("q04c_espacios_itinerancia", "Parque, biblioteca y colegio")]
 
-    pasos += [("q05_nombre", "Taller de agua"), ("q06_publico", publico)]
+    # El identificador va después del nombre: solo ahí se puede sugerir uno.
+    pasos += [
+        ("q05_nombre", "Taller de agua"),
+        ("q01_id_actividad", "ACT-001"),
+        ("q06_publico", publico),
+    ]
     if publico == "Primera infancia":
         pasos += [("q06a_acompanamiento_cuidadores",
                    "Sí, acompañamiento permanente durante toda la sesión")]
@@ -67,33 +73,34 @@ async def llegar_a_bloque1(sesion, tipo="Taller", publico="Adultos"):
 
 
 async def test_la_respuesta_se_persiste_de_inmediato(cliente, sesion):
-    await responder(sesion, "q00_etapa", "Ya ejecutada")
+    await responder(sesion, "q00_intencion", "Consolidar una actividad que ya realicé")
     filas = cliente.filas("epm_respuestas")
     assert len(filas) == 1
-    assert filas[0]["node_id"] == "q00_etapa"
-    assert filas[0]["valor"] == "Ya ejecutada"
-    assert filas[0]["tree_version"] == "1.0.0"
+    assert filas[0]["node_id"] == "q00_intencion"
+    assert filas[0]["valor"] == "Consolidar una actividad que ya realicé"
+    assert filas[0]["tree_version"] == "1.1.0"
 
 
 async def test_el_nodo_siguiente_es_el_correcto(cliente, sesion):
-    r = await responder(sesion, "q00_etapa", "Ya ejecutada")
-    assert r["node"]["node_id"] == "q01_id_actividad"
+    """La apertura por intención lleva al programa, no al identificador."""
+    r = await responder(sesion, "q00_intencion", EJEC)
+    assert r["node"]["node_id"] == "q02_programa"
 
 
 async def test_la_validacion_impide_persistir(cliente, sesion):
     with pytest.raises(engine.ValidationFailed) as exc:
-        await responder(sesion, "q00_etapa", "Etapa inventada")
+        await responder(sesion, "q00_intencion", "Etapa inventada")
     assert exc.value.errors
     assert cliente.filas("epm_respuestas") == []
 
 
 async def test_seleccion_multiple_guarda_texto_y_json(cliente, sesion):
-    await responder(sesion, "q00_etapa", "Ya ejecutada")
-    await responder(sesion, "q01_id_actividad", "ACT-001")
+    await responder(sesion, "q00_intencion", "Consolidar una actividad que ya realicé")
     await responder(sesion, "q02_programa", "Biblioteca_EPM")
     await responder(sesion, "q03_linea_accion", "Educación")
     await responder(sesion, "q04_tipo_actividad", "Taller")
     await responder(sesion, "q05_nombre", "Taller de agua")
+    await responder(sesion, "q01_id_actividad", "ACT-001")
     await responder(sesion, "q06_publico", "Adultos")
     await responder(sesion, "q07_publico_especifico", "Líderes comunitarios")
     await responder(sesion, "q08_lugar", "Biblioteca EPM")
@@ -111,30 +118,30 @@ async def test_seleccion_multiple_guarda_texto_y_json(cliente, sesion):
 
 
 async def test_submit_answer_es_idempotente(cliente, sesion):
-    r1 = await responder(sesion, "q00_etapa", "Ya ejecutada")
-    r2 = await responder(sesion, "q00_etapa", "Ya ejecutada")
+    r1 = await responder(sesion, "q00_intencion", "Consolidar una actividad que ya realicé")
+    r2 = await responder(sesion, "q00_intencion", "Consolidar una actividad que ya realicé")
 
-    filas = [f for f in cliente.filas("epm_respuestas") if f["node_id"] == "q00_etapa"]
+    filas = [f for f in cliente.filas("epm_respuestas") if f["node_id"] == "q00_intencion"]
     assert len(filas) == 1, "Reenviar la misma respuesta duplicó la fila."
     assert r1["node"]["node_id"] == r2["node"]["node_id"], "Avanzó dos veces."
 
 
 async def test_reenviar_un_valor_distinto_actualiza_sin_duplicar(cliente, sesion):
-    await responder(sesion, "q00_etapa", "Ya ejecutada")
-    await responder(sesion, "q00_etapa", "En planeación")
+    await responder(sesion, "q00_intencion", "Consolidar una actividad que ya realicé")
+    await responder(sesion, "q00_intencion", "Planear una actividad que voy a realizar")
 
-    filas = [f for f in cliente.filas("epm_respuestas") if f["node_id"] == "q00_etapa"]
+    filas = [f for f in cliente.filas("epm_respuestas") if f["node_id"] == "q00_intencion"]
     assert len(filas) == 1
-    assert filas[0]["valor"] == "En planeación"
+    assert filas[0]["valor"] == "Planear una actividad que voy a realizar"
 
 
 async def test_el_intento_fallido_queda_registrado(cliente, sesion):
-    await responder(sesion, "q00_etapa", "Ya ejecutada")
-    await responder(sesion, "q01_id_actividad", "ACT-001")
+    await responder(sesion, "q00_intencion", EJEC)
+    await responder(sesion, "q02_programa", "Biblioteca_EPM")
     with pytest.raises(engine.ValidationFailed):
-        await responder(sesion, "q02_programa", "Programa inventado")
+        await responder(sesion, "q03_linea_accion", "Linea inventada")
 
-    fila = next(f for f in cliente.filas("epm_respuestas") if f["node_id"] == "q01_id_actividad")
+    fila = next(f for f in cliente.filas("epm_respuestas") if f["node_id"] == "q02_programa")
     assert fila["intentos"] == 1  # el fallo fue en otro nodo
 
 
@@ -142,48 +149,48 @@ async def test_el_intento_fallido_queda_registrado(cliente, sesion):
 
 
 async def test_el_estado_sobrevive_a_un_reinicio(cliente, sesion):
-    await responder(sesion, "q00_etapa", "Ya ejecutada")
-    await responder(sesion, "q01_id_actividad", "ACT-001")
+    await responder(sesion, "q00_intencion", "Consolidar una actividad que ya realicé")
+    await responder(sesion, "q02_programa", "Biblioteca_EPM")
 
     # No hay caché que limpiar: el motor relee de la base en cada llamada.
     actual = await engine.get_current_node(sesion["session_id"])
-    assert actual["node"]["node_id"] == "q02_programa"
-    assert actual["progress"]["respondidos"] == 1  # q00 no produce campo
+    assert actual["node"]["node_id"] == "q03_linea_accion"
+    assert actual["progress"]["respondidos"] == 1  # la intención no es un campo
 
 
 async def test_el_valor_previo_se_devuelve_al_repintar(cliente, sesion):
-    await responder(sesion, "q00_etapa", "Ya ejecutada")
-    await responder(sesion, "q01_id_actividad", "ACT-001")
+    await responder(sesion, "q00_intencion", EJEC)
+    await responder(sesion, "q02_programa", "Biblioteca_EPM")
     await engine.go_back(sesion["session_id"])
-    await responder(sesion, "q01_id_actividad", "ACT-002")
+    await responder(sesion, "q02_programa", "Museo_del_Agua")
 
     actual = await engine.get_current_node(sesion["session_id"])
-    assert actual["node"]["node_id"] == "q02_programa"
+    assert actual["node"]["node_id"] == "q03_linea_accion"
 
 
 # ─── Retroceso ──────────────────────────────────────────────────────────────
 
 
 async def test_go_back_devuelve_al_nodo_anterior(cliente, sesion):
-    await responder(sesion, "q00_etapa", "Ya ejecutada")
-    await responder(sesion, "q01_id_actividad", "ACT-001")
+    await responder(sesion, "q00_intencion", EJEC)
+    await responder(sesion, "q02_programa", "Biblioteca_EPM")
 
     r = await engine.go_back(sesion["session_id"])
-    assert r["node"]["node_id"] == "q01_id_actividad"
+    assert r["node"]["node_id"] == "q02_programa"
 
 
 async def test_go_back_en_la_raiz_no_falla(cliente, sesion):
     r = await engine.go_back(sesion["session_id"])
-    assert r["node"]["node_id"] == "q00_etapa"
+    assert r["node"]["node_id"] == "q00_intencion"
 
 
 async def test_go_back_no_borra_las_respuestas_anteriores(cliente, sesion):
-    await responder(sesion, "q00_etapa", "Ya ejecutada")
-    await responder(sesion, "q01_id_actividad", "ACT-001")
+    await responder(sesion, "q00_intencion", EJEC)
+    await responder(sesion, "q02_programa", "Biblioteca_EPM")
     await engine.go_back(sesion["session_id"])
 
     quedan = {f["node_id"] for f in cliente.filas("epm_respuestas")}
-    assert "q00_etapa" in quedan
+    assert "q00_intencion" in quedan
 
 
 # ─── Marcado stale al cambiar de ramificación ───────────────────────────────
@@ -234,7 +241,7 @@ async def test_el_progreso_no_es_sobre_25_fijo(cliente, sesion):
 
 
 async def test_la_rama_planeada_tiene_menos_campos(cliente, sesion):
-    await responder(sesion, "q00_etapa", "En planeación")
+    await responder(sesion, "q00_intencion", "Planear una actividad que voy a realizar")
     p = (await engine.get_current_node(sesion["session_id"]))["progress"]
     bloques = {b["bloque"] for b in p["por_bloque"]}
     assert 2 not in bloques and 3 not in bloques
@@ -265,7 +272,7 @@ async def test_el_acompanamiento_se_anexa_al_publico_especifico(cliente, sesion)
 
 
 async def test_el_resumen_marca_los_campos_no_alcanzables(cliente, sesion):
-    await responder(sesion, "q00_etapa", "En planeación")
+    await responder(sesion, "q00_intencion", "Planear una actividad que voy a realizar")
     resumen = await engine.get_summary(sesion["session_id"])
     por_clave = {c["field_key"]: c for c in resumen["campos"]}
 
@@ -275,7 +282,7 @@ async def test_el_resumen_marca_los_campos_no_alcanzables(cliente, sesion):
 
 
 async def test_el_resumen_devuelve_los_25_en_orden(cliente, sesion):
-    await responder(sesion, "q00_etapa", "Ya ejecutada")
+    await responder(sesion, "q00_intencion", "Consolidar una actividad que ya realicé")
     resumen = await engine.get_summary(sesion["session_id"])
     assert [c["field_key"] for c in resumen["campos"]] == F.FIELD_KEYS
 
@@ -287,9 +294,13 @@ async def test_id_actividad_duplicado_es_rechazado(cliente, sesion):
     cliente.table("epm_respuestas").filas.append({
         "id": "otra", "session_id": "otra-sesion", "node_id": "q01_id_actividad",
         "field_key": "id_actividad", "valor": "ACT-001", "stale": False,
-        "es_valida": True, "tree_version": "1.0.0",
+        "es_valida": True, "tree_version": "1.1.0",
     })
-    await responder(sesion, "q00_etapa", "Ya ejecutada")
+    # El identificador ya no es el primer nodo: hay que llegar hasta él.
+    for nid, v in [("q00_intencion", EJEC), ("q02_programa", "Biblioteca_EPM"),
+                   ("q03_linea_accion", "Educación"), ("q04_tipo_actividad", "Taller"),
+                   ("q05_nombre", "Taller de agua")]:
+        await responder(sesion, nid, v)
 
     with pytest.raises(engine.ValidationFailed) as exc:
         await responder(sesion, "q01_id_actividad", "ACT-001")
@@ -297,7 +308,11 @@ async def test_id_actividad_duplicado_es_rechazado(cliente, sesion):
 
 
 async def test_el_mismo_id_en_la_misma_sesion_se_permite(cliente, sesion):
-    await responder(sesion, "q00_etapa", "Ya ejecutada")
+    # El identificador ya no es el primer nodo: hay que llegar hasta él.
+    for nid, v in [("q00_intencion", EJEC), ("q02_programa", "Biblioteca_EPM"),
+                   ("q03_linea_accion", "Educación"), ("q04_tipo_actividad", "Taller"),
+                   ("q05_nombre", "Taller de agua")]:
+        await responder(sesion, nid, v)
     await responder(sesion, "q01_id_actividad", "ACT-001")
     await responder(sesion, "q01_id_actividad", "ACT-001")  # reenvío idempotente
 
@@ -357,19 +372,19 @@ async def test_los_numericos_se_proyectan_como_enteros(cliente, sesion):
 async def test_la_rama_planeada_cierra_como_planeada(cliente, sesion):
     await llegar_a_bloque1(sesion)
     # Se cambia la etapa: la sesión pasa a ser solo diseño.
-    await responder(sesion, "q00_etapa", "En planeación")
+    await responder(sesion, "q00_intencion", "Planear una actividad que voy a realizar")
 
     r = await engine.finalize(sesion["session_id"], sesion["user_id"])
     assert r["estado"] == "planeada"
 
 
 async def test_el_origen_de_la_respuesta_queda_registrado(cliente, sesion):
-    await responder(sesion, "q00_etapa", "Ya ejecutada", origen="propio")
-    await responder(sesion, "q01_id_actividad", "ACT-001")
+    await responder(sesion, "q00_intencion", EJEC, origen="propio")
     await responder(sesion, "q02_programa", "Biblioteca_EPM")
     await responder(sesion, "q03_linea_accion", "Educación")
     await responder(sesion, "q04_tipo_actividad", "Taller")
     await responder(sesion, "q05_nombre", "Taller de agua")
+    await responder(sesion, "q01_id_actividad", "ACT-001")
     await responder(sesion, "q06_publico", "Adultos")
     await responder(
         sesion, "q07_publico_especifico",
@@ -393,7 +408,7 @@ async def test_el_autocompletado_de_lugar_sale_de_la_base(cliente, sesion):
         cliente.table("epm_respuestas").filas.append({
             "id": f"x{i}", "session_id": f"s{i}", "node_id": "q08_lugar",
             "field_key": "lugar", "valor": lugar, "stale": False,
-            "es_valida": True, "tree_version": "1.0.0",
+            "es_valida": True, "tree_version": "1.1.0",
         })
     valores = await repo.valores_distintos("lugar")
     assert valores == ["Biblioteca EPM", "Museo del Agua"], "Debe deduplicar y ordenar."

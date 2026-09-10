@@ -163,6 +163,17 @@ CLOSED_OPTIONS: dict[str, tuple[str, ...]] = {
 # base de datos. Cuando la Fundación EPM entregue el catálogo oficial de
 # espacios por programa, añadirlo aquí y añadir el CHECK en la migración 006.
 
+# TODO: PROVISIONAL. Estos prefijos NO son institucionales: los definimos para
+# poder proponerle al facilitador un código con sentido en vez de pedírselo en
+# frío. Cuando la Fundación entregue la nomenclatura oficial, reemplazarlos.
+PROGRAMA_PREFIJOS: dict[str, str] = {
+    "Biblioteca_EPM": "BIB",
+    "Programa_UVA": "UVA",
+    "Museo_del_Agua": "MDA",
+    "Parque_de_los_deseos": "PDD",
+}
+PREFIJO_POR_DEFECTO = "ACT"
+
 # TODO: `id_actividad` no tiene patrón institucional confirmado. Se valida solo
 # unicidad y longitud mínima (ver ID_ACTIVIDAD_MIN_LEN). Cuando se entregue el
 # patrón real, añadir aquí la expresión regular y el CHECK correspondiente.

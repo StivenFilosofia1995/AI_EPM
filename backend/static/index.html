@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Consolidación Metodológica — Fundación EPM</title>
   <link rel="icon" href="/static/assets/favicon.svg" type="image/svg+xml" />
-  <link rel="stylesheet" href="/static/css/styles.css?v=2.1.0" />
-  <link rel="stylesheet" href="/static/css/tree.css?v=2.1.0" />
+  <link rel="stylesheet" href="/static/css/styles.css?v=2.2.1" />
+  <link rel="stylesheet" href="/static/css/tree.css?v=2.2.1" />
 </head>
 <body>
 
@@ -186,9 +186,10 @@
   <main class="contenido">
     <div id="avisos" aria-live="polite"></div>
 
-    <!-- Vista: nodo actual -->
-    <section id="vistaNodo" aria-live="polite">
-      <div class="cargando">Cargando…</div>
+    <!-- Vista: conversación -->
+    <section id="vistaNodo" class="conversacion">
+      <div class="hilo" id="hilo" aria-live="polite" aria-label="Conversación"></div>
+      <div class="dock" id="dock"></div>
     </section>
 
     <!-- Vista: resumen de los 25 campos -->
@@ -205,7 +206,7 @@
 <!-- El parámetro ?v= fuerza al navegador a descargar el archivo nuevo
      tras un despliegue. Súbelo al publicar cambios en el frontend.
      El backend además envía Cache-Control: no-cache en .js y .css. -->
-<script src="/static/js/logo.js?v=2.1.0"></script>
-<script src="/static/js/app.js?v=2.1.0"></script>
+<script src="/static/js/logo.js?v=2.2.1"></script>
+<script src="/static/js/app.js?v=2.2.1"></script>
 </body>
 </html>
