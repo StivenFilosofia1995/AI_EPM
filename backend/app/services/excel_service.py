@@ -1,3 +1,12 @@
+"""
+Generación del Excel institucional.
+
+Las etiquetas y el orden ya NO se definen aquí. Se derivan de
+app.domain.fields, la fuente de verdad única. Antes este módulo mantenía su
+propia copia de los 25 campos y ya había divergido de FIELD_HEADERS en dos
+etiquetas ("Duración Total de la Sesión" y "% de Cumplimiento de Evaluación").
+"""
+
 import io
 from datetime import datetime
 
@@ -5,7 +14,9 @@ from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 
-# EPM brand colors (hex without #)
+from app.domain.fields import FIELDS as _CONTRACT_FIELDS
+
+# Colores institucionales EPM (hex sin #)
 _GREEN = "00A650"
 _BLUE = "0066B3"
 _DARK_BLUE = "003B71"
@@ -14,38 +25,10 @@ _GREEN_LIGHT = "E8F5E9"
 _BLUE_LIGHT = "E3F2FD"
 _PURPLE_LIGHT = "EDE7F6"
 
+# (etiqueta, clave) por bloque, derivado del contrato. Imposible desincronizar.
 _FIELDS = {
-    "block1": [
-        ("ID Actividad", "id_actividad"),
-        ("Programa / Proyecto", "programa"),
-        ("Línea de Acción", "linea_accion"),
-        ("Tipo de Actividad", "tipo_actividad"),
-        ("Nombre de la Actividad", "nombre"),
-        ("Público", "publico"),
-        ("Público Específico", "publico_especifico"),
-        ("Lugar", "lugar"),
-        ("Responsable", "responsable"),
-        ("Duración Total de la Sesión", "duracion"),
-        ("Pregunta Problematizadora", "pregunta_problematizadora"),
-        ("ODS", "ods"),
-        ("Metodología", "metodologia"),
-        ("Descripción de la Sesión", "descripcion_sesion"),
-        ("Recursos y/o Materiales", "recursos"),
-        ("Fecha", "fecha"),
-    ],
-    "block2": [
-        ("Logros", "logros"),
-        ("Retos / Dificultades", "retos"),
-        ("Observaciones a Destacar", "observaciones"),
-        ("Comentarios de Participantes", "comentarios"),
-    ],
-    "block3": [
-        ("Instrumento Evaluativo", "instrumento_evaluativo"),
-        ("# Participantes Evaluados", "participantes_evaluados"),
-        ("Cumplimiento de Objetivos", "cumplimiento_objetivos"),
-        ("Acciones de Mejora", "acciones_mejora"),
-        ("% de Cumplimiento de Evaluación", "porcentaje_cumplimiento"),
-    ],
+    f"block{b}": [(f.header, f.key) for f in _CONTRACT_FIELDS if f.block == b]
+    for b in (1, 2, 3)
 }
 
 

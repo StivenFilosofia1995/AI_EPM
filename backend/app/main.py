@@ -10,9 +10,11 @@ from fastapi.staticfiles import StaticFiles
 from app.config import settings
 from app.domain.fields import assert_contract
 from app.domain.tree_loader import get_tree
+from app.routes.admin import router as admin_router
 from app.routes.auth import router as auth_router
-from app.routes.chat import router as chat_router
+from app.routes.exports import router as exports_router
 from app.routes.health import router as health_router
+from app.routes.legacy import router as legacy_router
 from app.routes.tree import router as tree_router
 
 logging.basicConfig(
@@ -76,8 +78,11 @@ app.add_middleware(
 # ─── Rutas de API ───────────────────────────────────────────────────────────
 app.include_router(auth_router)
 app.include_router(tree_router)
-app.include_router(chat_router)
+app.include_router(exports_router)
+app.include_router(admin_router)
 app.include_router(health_router)
+# Obsoletos: se registran al final para que nunca ensombrezcan a los actuales.
+app.include_router(legacy_router)
 
 # ─── Frontend estático ──────────────────────────────────────────────────────
 STATIC_DIR = Path(__file__).parent.parent / "static"

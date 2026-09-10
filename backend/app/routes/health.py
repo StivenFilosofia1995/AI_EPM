@@ -1,10 +1,80 @@
+"""
+Comprobación de salud.
+
+El health check anterior no hacía ninguna llamada: devolvía "healthy" si la
+variable ANTHROPIC_API_KEY tenía algún valor. Railway lo usa como
+healthcheckPath, así que un despliegue con una clave inválida se reportaba
+como sano. Este comprueba lo que de verdad tiene que estar en pie para que la
+aplicación funcione.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import logging
+
 from fastapi import APIRouter
 
-from app.services.ollama_client import ollama_health
+from app.config import settings
+from app.domain.tree_loader import TreeError, get_tree
+from app.services.db import DatabaseUnavailable, get_client
 
-router = APIRouter(prefix="/api", tags=["health"])
+logger = logging.getLogger(__name__)
+
+router = APIRouter(prefix="/api", tags=["salud"])
+
+
+async def _check_db() -> dict:
+    try:
+        client = get_client()
+        await asyncio.wait_for(
+            asyncio.to_thread(
+                lambda: client.table("epm_sessions").select("session_id").limit(1).execute()
+            ),
+            timeout=5.0,
+        )
+        return {"estado": "ok"}
+    except DatabaseUnavailable as exc:
+        return {"estado": "sin_configurar", "detalle": str(exc)}
+    except asyncio.TimeoutError:
+        return {"estado": "lento", "detalle": "La consulta superó los 5 segundos."}
+    except Exception as exc:
+        return {"estado": "error", "detalle": f"{type(exc).__name__}: {exc}"}
+
+
+def _check_tree() -> dict:
+    try:
+        tree = get_tree()
+        return {
+            "estado": "ok",
+            "version": tree.version,
+            "nodos": len(tree.nodes),
+            "checksum": tree.checksum[:12],
+        }
+    except TreeError as exc:
+        return {"estado": "error", "detalle": str(exc)}
 
 
 @router.get("/health")
 async def health():
-    return await ollama_health()
+    """
+    La captura de datos NO depende del modelo de lenguaje. Por eso el estado
+    general solo se degrada si falla la base de datos o el árbol: sin modelo
+    se puede consolidar igual, solo no se genera el análisis final.
+    """
+    db = await _check_db()
+    tree = _check_tree()
+    modelo = {
+        "estado": "ok" if settings.ANTHROPIC_API_KEY else "sin_configurar",
+        "modelo": settings.ANTHROPIC_MODEL if settings.ANTHROPIC_API_KEY else None,
+        "nota": "Solo se usa en la etapa de análisis e ideas.",
+    }
+
+    critico_ok = db["estado"] == "ok" and tree["estado"] == "ok"
+
+    return {
+        "status": "healthy" if critico_ok else "degraded",
+        "base_datos": db,
+        "arbol": tree,
+        "modelo": modelo,
+    }
