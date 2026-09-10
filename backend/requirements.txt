@@ -22,3 +22,6 @@ PyYAML==6.0.2
 # Autenticacion
 PyJWT==2.10.1
 argon2-cffi==23.1.0
+
+# Validacion de correo (pydantic EmailStr)
+email-validator==2.2.0
