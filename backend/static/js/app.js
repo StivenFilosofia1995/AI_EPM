@@ -274,6 +274,13 @@ async function iniciarApp() {
   $('#usuarioEmail').textContent  = USUARIO.email;
   $('#usuarioRol').textContent    = USUARIO.rol;
 
+  // Quien supervisa necesita poder llegar al panel sin escribir la URL.
+  const enlace = $('#enlaceAdmin');
+  if (['admin', 'coordinador'].includes(USUARIO.rol)) {
+    enlace.classList.remove('oculto');
+    enlace.style.display = 'block';
+  }
+
   $('#pantallaAcceso').classList.add('oculto');
   $('#pantallaRegistro').classList.add('oculto');
   $('#app').classList.remove('oculto');
@@ -323,7 +330,7 @@ async function verSesiones() {
       const tabla = el('table', { class: 'tabla-resumen' });
       tabla.appendChild(el('thead', {}, el('tr', {},
         el('th', { text: 'Iniciada' }), el('th', { text: 'Estado' }),
-        el('th', { text: 'Última actividad' }), el('th', { text: '' }))));
+        el('th', { text: 'Última actividad' }), el('th', { text: '' }), el('th', { text: '' }))));
       const tbody = el('tbody');
       for (const s of sessions) {
         tbody.appendChild(el('tr', {},
@@ -335,6 +342,11 @@ async function verSesiones() {
             onclick: () => { SESSION = s.session_id; localStorage.setItem(SESSION_KEY, SESSION); cargarNodoActual(); },
             text: s.estado === 'completada' ? 'Ver' : 'Retomar',
           })),
+          el('td', {}, el('button', {
+            class: 'btn',
+            onclick: () => descargarSesion(s.session_id),
+            text: 'Excel',
+          })),
         ));
       }
       tabla.appendChild(tbody);
@@ -342,7 +354,12 @@ async function verSesiones() {
     }
 
     cont.appendChild(el('div', { class: 'acciones' },
-      el('button', { class: 'btn btn-primario', onclick: nuevaSesion, text: 'Nueva actividad' })));
+      el('button', { class: 'btn btn-primario', onclick: nuevaSesion, text: 'Nueva actividad' }),
+      el('div', { class: 'espaciador' }),
+      sessions.length
+        ? el('button', { class: 'btn', onclick: descargarTodas,
+                         text: 'Descargar todas en Excel' })
+        : null));
   } catch (ex) {
     cont.innerHTML = '';
     mostrarAviso(ex.message, 'error');
@@ -799,7 +816,6 @@ async function verResumen() {
       el('button', { class: 'btn btn-primario', onclick: finalizar, text: 'Finalizar consolidación' }),
       el('div', { class: 'espaciador' }),
       el('button', { class: 'btn', onclick: descargarExcel, text: 'Descargar Excel' }),
-      el('button', { class: 'btn', onclick: guardarEnSheets, text: 'Guardar en Sheets' }),
     ));
   } catch (ex) {
     cont.innerHTML = '';
@@ -821,6 +837,36 @@ async function finalizar() {
   }
 }
 
+async function descargarArchivo(ruta, cuerpo, nombre) {
+  const r = await api(ruta, { method: 'POST', body: cuerpo, raw: true });
+  const blob = await r.blob();
+  const url = URL.createObjectURL(blob);
+  const a = el('a', { href: url, download: nombre });
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}
+
+async function descargarSesion(sessionId, etiqueta) {
+  try {
+    await descargarArchivo('/api/excel/generate', { session_id: sessionId },
+                           `consolidacion_epm_${etiqueta || sessionId.slice(0, 8)}.xlsx`);
+    mostrarAviso('Excel descargado.', 'ok');
+  } catch (ex) {
+    mostrarAviso(`No se pudo generar el Excel: ${ex.message}`, 'error');
+  }
+}
+
+async function descargarTodas() {
+  try {
+    await descargarArchivo('/api/excel/lote', {}, 'mis_consolidaciones_epm.xlsx');
+    mostrarAviso('Excel con todas tus consolidaciones descargado.', 'ok');
+  } catch (ex) {
+    mostrarAviso(ex.status === 404
+      ? 'Todavía no tienes consolidaciones para exportar.'
+      : `No se pudo generar el Excel: ${ex.message}`, 'error');
+  }
+}
+
 async function descargarExcel() {
   try {
     const r = await api('/api/excel/generate', {
@@ -834,17 +880,6 @@ async function descargarExcel() {
     mostrarAviso('Excel descargado.', 'ok');
   } catch (ex) {
     mostrarAviso(`No se pudo generar el Excel: ${ex.message}`, 'error');
-  }
-}
-
-async function guardarEnSheets() {
-  try {
-    const datos = await api('/api/sheets/submit', {
-      method: 'POST', body: { session_id: SESSION },
-    });
-    mostrarAviso(`Guardado en Google Sheets, fila ${datos.sheets_row}.`, 'ok');
-  } catch (ex) {
-    mostrarAviso(`No se pudo guardar en Sheets: ${ex.message}`, 'error');
   }
 }
 

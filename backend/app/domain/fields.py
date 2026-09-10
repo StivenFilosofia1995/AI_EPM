@@ -2,10 +2,10 @@
 Fuente de verdad única de los 25 campos de la consolidación metodológica EPM.
 
 CONTRATO INMUTABLE. El orden, las claves y los encabezados de este módulo son
-los que ya usan el Excel institucional y la hoja de Google. No se modifican.
+los que ya usa el Excel institucional. No se modifican.
 
-`google_sheets_service`, `excel_service` y `email_service` importan de aquí y
-no definen sus propias listas. La prueba `tests/test_fields.py` falla si las
+`excel_service` y `email_service` importan de aquí y no definen sus propias
+listas. La prueba `tests/test_fields.py` falla si las
 listas se desincronizan o si dejan de ser 25.
 """
 

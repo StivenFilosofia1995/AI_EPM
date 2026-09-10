@@ -111,3 +111,55 @@ def generate_excel(form_data: dict) -> bytes:
     wb.save(output)
     output.seek(0)
     return output.getvalue()
+
+
+def generate_excel_lote(filas: list[dict]) -> bytes:
+    """
+    Un libro con una fila por consolidación, para seguimiento.
+
+    Las 25 columnas del contrato van primero y en su orden exacto, de la A a
+    la Y. Las columnas de seguimiento (facilitador, estado, fechas) van
+    después, para no desplazar el contrato: quien lea A..Y sigue encontrando
+    lo mismo que en la hoja institucional.
+    """
+    from app.domain.fields import FIELD_HEADERS, FIELD_KEYS
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "CONSOLIDADO"
+
+    extra = ["Facilitador", "Programa del facilitador", "Estado",
+             "Avance %", "Creada", "Finalizada"]
+    encabezados = list(FIELD_HEADERS) + extra
+
+    ws.append(encabezados)
+    for i in range(1, len(encabezados) + 1):
+        celda = ws.cell(row=1, column=i)
+        celda.font = Font(bold=True, color=_WHITE, size=10)
+        celda.fill = PatternFill("solid", fgColor=_DARK_BLUE if i > len(FIELD_KEYS) else _GREEN)
+        celda.alignment = Alignment(vertical="center", wrap_text=True)
+    ws.row_dimensions[1].height = 30
+    ws.freeze_panes = "A2"
+
+    for fila in filas:
+        valores = [("" if fila.get(k) is None else str(fila.get(k))) for k in FIELD_KEYS]
+        valores += [
+            fila.get("facilitador") or "",
+            fila.get("facilitador_programa") or "",
+            fila.get("estado") or "",
+            fila.get("porcentaje_avance") if fila.get("porcentaje_avance") is not None else "",
+            (fila.get("created_at") or "")[:10],
+            (fila.get("completed_at") or "")[:10],
+        ]
+        ws.append(valores)
+
+    for i in range(1, len(encabezados) + 1):
+        ws.column_dimensions[get_column_letter(i)].width = 26 if i <= len(FIELD_KEYS) else 18
+    for row in ws.iter_rows(min_row=2):
+        for celda in row:
+            celda.alignment = Alignment(wrap_text=True, vertical="top")
+
+    salida = io.BytesIO()
+    wb.save(salida)
+    salida.seek(0)
+    return salida.getvalue()

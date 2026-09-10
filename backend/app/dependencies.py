@@ -103,6 +103,19 @@ async def verify_session_ownership(session_id: str, user: dict) -> dict:
 _buckets: dict[str, list[float]] = defaultdict(list)
 
 
+def _espera_legible(segundos: int) -> str:
+    """
+    Decirle a alguien que vuelva en 3567 segundos no le sirve de nada.
+    """
+    if segundos < 60:
+        return "en menos de un minuto"
+    minutos = round(segundos / 60)
+    if minutos < 60:
+        return f"en {minutos} minuto{'s' if minutos != 1 else ''}"
+    horas = round(minutos / 60)
+    return f"en aproximadamente {horas} hora{'s' if horas != 1 else ''}"
+
+
 def _consumir(clave: str, veces: int, por_segundos: int) -> None:
     ahora = time.monotonic()
     ventana = _buckets[clave]
@@ -114,7 +127,7 @@ def _consumir(clave: str, veces: int, por_segundos: int) -> None:
         espera = int(por_segundos - (ahora - ventana[0])) + 1
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail=f"Demasiadas solicitudes. Intenta de nuevo en {espera} segundos.",
+            detail=f"Demasiadas solicitudes seguidas. Intenta de nuevo {_espera_legible(espera)}.",
             headers={"Retry-After": str(espera)},
         )
 
@@ -156,10 +169,14 @@ def limitador_por_ip(veces: int, por_segundos: int, nombre: str):
     return dependencia
 
 
-limitar_modelo = limitador_por_usuario(veces=20, por_segundos=300, nombre="modelo")
-limitar_correo = limitador_por_usuario(veces=5, por_segundos=600, nombre="correo")
-limitar_registro = limitador_por_ip(veces=5, por_segundos=3600, nombre="registro")
-limitar_login = limitador_por_ip(veces=20, por_segundos=600, nombre="login")
+# Los límites protegen contra abuso, no contra el uso normal. Varias personas
+# de una misma sede comparten IP pública, así que un límite estrecho por IP
+# bloquea a gente legítima: 5 registros por hora dejaba fuera a un equipo
+# entero inscribiéndose en la misma jornada.
+limitar_modelo = limitador_por_usuario(veces=30, por_segundos=300, nombre="modelo")
+limitar_correo = limitador_por_usuario(veces=15, por_segundos=600, nombre="correo")
+limitar_registro = limitador_por_ip(veces=40, por_segundos=3600, nombre="registro")
+limitar_login = limitador_por_ip(veces=40, por_segundos=600, nombre="login")
 
 
 def es_limitador(call) -> bool:

@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Panel de administración — Fundación EPM</title>
   <link rel="icon" href="/static/assets/favicon.svg" type="image/svg+xml" />
-  <link rel="stylesheet" href="/static/css/styles.css?v=2.2.1" />
-  <link rel="stylesheet" href="/static/css/tree.css?v=2.2.1" />
+  <link rel="stylesheet" href="/static/css/styles.css?v=2.3.0" />
+  <link rel="stylesheet" href="/static/css/tree.css?v=2.3.0" />
   <style>
     .admin-shell { max-width: 1280px; margin: 0 auto; padding: 26px 22px; }
     .admin-cab {
@@ -91,7 +91,7 @@
   <div id="contenido"></div>
 </div>
 
-<script src="/static/js/logo.js?v=2.2.1"></script>
+<script src="/static/js/logo.js?v=2.3.0"></script>
 <script>
 'use strict';
 const TOKEN_KEY = 'epm_token';
@@ -236,7 +236,33 @@ async function vistaSesiones(c) {
   const fAvance = el('input', { type: 'number', id: 'fAvance', min: 0, max: 100, placeholder: '0' });
   filtros.appendChild(el('div', { class: 'campo' }, el('label', { for: 'fAvance', text: 'Avance mínimo %' }), fAvance));
   filtros.appendChild(el('button', { class: 'btn btn-primario', onclick: cargar, text: 'Filtrar' }));
+  filtros.appendChild(el('button', { class: 'btn', onclick: descargarLote,
+                                     text: 'Descargar Excel del filtro' }));
   c.appendChild(filtros);
+
+  async function descargarLote() {
+    const cuerpo = {};
+    for (const [id, clave] of [['fEstado','estado'],['fPrograma','programa'],
+                               ['fDesde','desde'],['fHasta','hasta']]) {
+      const v = $('#' + id).value;
+      if (v) cuerpo[clave] = v;
+    }
+    if (window.__usuarioFiltrado) cuerpo.user_id = window.__usuarioFiltrado;
+    try {
+      const r = await fetch('/api/excel/lote', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${TOKEN}` },
+        body: JSON.stringify(cuerpo),
+      });
+      if (r.status === 404) { aviso('No hay consolidaciones que coincidan con el filtro.'); return; }
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const url = URL.createObjectURL(await r.blob());
+      const a = el('a', { href: url, download: 'consolidaciones_epm.xlsx' });
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+      aviso(`Excel descargado con ${r.headers.get('X-Total-Filas') || '?'} consolidaciones.`, 'ok');
+    } catch (ex) { aviso('No se pudo generar el Excel: ' + ex.message); }
+  }
 
   const zona = el('div');
   c.appendChild(zona);
@@ -354,6 +380,22 @@ async function descargar(sessionId) {
 }
 
 // ── Tablas genéricas ────────────────────────────────────────────────────
+async function descargarDeUsuario(userId, nombre) {
+  try {
+    const r = await fetch('/api/excel/lote', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${TOKEN}` },
+      body: JSON.stringify({ user_id: userId }),
+    });
+    if (r.status === 404) { aviso(`${nombre} todavía no tiene consolidaciones.`); return; }
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const url = URL.createObjectURL(await r.blob());
+    const a = el('a', { href: url, download: `consolidaciones_${(nombre || 'facilitador').replace(/\s+/g, '_')}.xlsx` });
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+  } catch (ex) { aviso('No se pudo generar el Excel: ' + ex.message); }
+}
+
 async function vistaTablaSimple(c, ruta, clave) {
   const d = await api(ruta);
   const filas = d[clave] || [];
@@ -362,14 +404,24 @@ async function vistaTablaSimple(c, ruta, clave) {
     c.appendChild(el('p', { class: 'nodo-ayuda', text: 'Todavía no hay datos suficientes.' }));
     return;
   }
-  const columnas = Object.keys(filas[0]);
+  const columnas = Object.keys(filas[0]).filter(k => k !== 'user_id');
+  const conDescarga = 'user_id' in filas[0];
   const tabla = el('table', { class: 'tabla-resumen' });
   tabla.appendChild(el('thead', {}, el('tr', {},
-    ...columnas.map(k => el('th', { text: k.replace(/_/g, ' ') })))));
+    ...columnas.map(k => el('th', { text: k.replace(/_/g, ' ') })),
+    ...(conDescarga ? [el('th', { text: '' })] : []))));
   const tb = el('tbody');
   for (const f of filas) {
-    tb.appendChild(el('tr', {}, ...columnas.map(k =>
-      el('td', { text: f[k] === null || f[k] === undefined ? '—' : String(f[k]) }))));
+    const fila = el('tr', {}, ...columnas.map(k =>
+      el('td', { text: f[k] === null || f[k] === undefined ? '—' : String(f[k]) })));
+    if (conDescarga) {
+      fila.appendChild(el('td', {}, el('button', {
+        class: 'btn',
+        onclick: () => descargarDeUsuario(f.user_id, f.nombre),
+        text: 'Excel',
+      })));
+    }
+    tb.appendChild(fila);
   }
   tabla.appendChild(tb);
   c.appendChild(el('div', { class: 'tabla-wrap' }, tabla));

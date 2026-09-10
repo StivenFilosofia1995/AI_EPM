@@ -1,18 +1,21 @@
 """
-Exportaciones: Excel, Google Sheets y correo.
+Exportaciones: Excel y correo.
 
-Conservan el contrato de sus endpoints, pero ahora leen de epm_respuestas /
-v_actividades_export, nunca de la caché en memoria del proceso. Antes,
-descargar el Excel sin haber guardado primero en Sheets producía un archivo
-con las 25 etiquetas y todos los valores vacíos.
+La integración con Google Sheets se retiró: la consolidación vive en la base
+de datos y se entrega en Excel, que es el formato institucional. Eso elimina
+además la dependencia de una cuenta de servicio de Google.
 
-Todas exigen autenticación y verifican propiedad de la sesión.
+Leen de epm_respuestas o de la proyección consolidada, nunca de la caché en
+memoria del proceso. Todas exigen autenticación y verifican propiedad de la
+sesión, salvo la exportación por lote, que exige rol de supervisión.
 """
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
@@ -22,13 +25,9 @@ from app.dependencies import get_current_user, limitar_correo, verify_session_ow
 from app.domain.fields import FIELD_KEYS
 from app.services import tree_engine as engine
 from app.services import tree_repository as repo
+from app.services.db import get_client
 from app.services.email_service import send_consolidation_email
-from app.services.excel_service import generate_excel
-from app.services.google_sheets_service import (
-    append_actividad,
-    read_sheet_structure,
-    sheet_url,
-)
+from app.services.excel_service import generate_excel, generate_excel_lote
 
 logger = logging.getLogger(__name__)
 
@@ -79,54 +78,9 @@ async def excel_generate(body: SessionBody, user: dict = Depends(get_current_use
     )
 
 
-@router.post("/sheets/submit")
-async def sheets_submit(body: SessionBody, user: dict = Depends(get_current_user)):
-    """
-    Escribe la fila en Google Sheets a partir de los datos ya capturados.
-    Ya no reconstruye los campos con un segundo llamado al modelo.
-    """
-    await verify_session_ownership(body.session_id, user)
-    campos = await _campos_de_sesion(body.session_id)
-
-    if not any(campos.values()):
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                "No hay datos para guardar. Diligencia al menos el bloque 1 "
-                "antes de exportar."
-            ),
-        )
-
-    fila = await append_actividad(campos)
-    if fila == -1:
-        raise HTTPException(
-            status_code=502,
-            detail="No se pudo escribir en Google Sheets. Verifica los permisos.",
-        )
-
-    await repo.project_actividad(
-        body.session_id,
-        user["id"],
-        {"sheets_row": fila},
-    )
-
-    return {
-        "ok": True,
-        "sheets_row": fila,
-        "campos_guardados": sum(1 for v in campos.values() if v),
-        "sheets_url": sheet_url(),
-    }
-
-
-@router.get("/sheets/structure")
-async def sheets_structure(_: dict = Depends(get_current_user)):
-    return {"headers": await read_sheet_structure()}
-
-
 class EmailBody(BaseModel):
     session_id: str
     to_email: EmailStr
-    sheets_row: int = 0
 
 
 @router.post("/email/send")
@@ -145,8 +99,6 @@ async def email_send(body: EmailBody, user: dict = Depends(limitar_correo)):
             to_email=str(body.to_email),
             form_data=campos,
             facilitador=user["nombre"],
-            sheets_url=sheet_url(),
-            sheets_row=body.sheets_row,
         )
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
@@ -157,3 +109,71 @@ async def email_send(body: EmailBody, user: dict = Depends(limitar_correo)):
         ) from exc
 
     return {"ok": True, "to": str(body.to_email)}
+
+
+# ─── Exportación por lote ───────────────────────────────────────────────────
+
+
+class LoteBody(BaseModel):
+    """
+    Filtros de la exportación.
+
+    Un facilitador solo puede exportar lo suyo: `user_id` se ignora y se
+    reemplaza por su propia identidad. Coordinadores y administradores sí
+    pueden filtrar por persona.
+    """
+
+    user_id: str | None = None
+    programa: str | None = None
+    estado: str | None = None
+    desde: str | None = None
+    hasta: str | None = None
+
+
+@router.post("/excel/lote")
+async def excel_lote(body: LoteBody, user: dict = Depends(get_current_user)):
+    """Un libro con una fila por consolidación, para seguimiento."""
+    supervisa = user["rol"] in ("admin", "coordinador")
+    user_id = body.user_id if supervisa else user["id"]
+
+    client = get_client()
+
+    def _consultar():
+        q = client.table("v_actividades_completas").select("*")
+        if user_id:
+            q = q.eq("user_id", user_id)
+        if body.programa:
+            q = q.eq("programa", body.programa)
+        if body.estado:
+            q = q.eq("estado", body.estado)
+        if body.desde:
+            q = q.gte("created_at", body.desde)
+        if body.hasta:
+            q = q.lte("created_at", body.hasta)
+        return q.order("created_at", desc=True).limit(2000).execute()
+
+    resultado = await asyncio.to_thread(_consultar)
+    filas = resultado.data or []
+
+    if not filas:
+        raise HTTPException(
+            status_code=404,
+            detail="No hay consolidaciones que coincidan con el filtro.",
+        )
+
+    contenido = generate_excel_lote(filas)
+    marca = datetime.now(UTC).strftime("%Y%m%d")
+    ambito = "equipo" if supervisa and not body.user_id else "mis_consolidaciones"
+
+    return Response(
+        content=contenido,
+        media_type=(
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        ),
+        headers={
+            "Content-Disposition": (
+                f"attachment; filename=consolidaciones_epm_{ambito}_{marca}.xlsx"
+            ),
+            "X-Total-Filas": str(len(filas)),
+        },
+    )

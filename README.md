@@ -23,7 +23,7 @@ Navegador (sin framework, sin build)
 FastAPI
    │  routes/tree.py        → motor de árbol (sin modelo)
    │  routes/auth.py        → JWT propio, Argon2id
-   │  routes/exports.py     → Excel, Sheets, correo
+   │  routes/exports.py     → Excel y correo
    │  routes/admin.py       → trazabilidad, por rol
    │  routes/ideas.py       → único punto que llama al modelo
    ▼
@@ -133,10 +133,19 @@ Al arrancar se valida el contrato de 25 campos y el grafo del árbol. Si algo es
 | `SECRET_KEY` | Sí | Firma los tokens. Cambiarla invalida toda sesión abierta |
 | `CORS_ORIGINS` | Sí | Lista separada por comas. Prohibido `*` |
 | `ANTHROPIC_API_KEY` | No | Solo análisis e ideas. Sin ella se consolida igual |
-| `GOOGLE_SHEETS_ID`, `GOOGLE_SHEETS_GID` | No | Exportación a Sheets |
-| `SERVICE_ACCOUNT_FILE` o `GOOGLE_CREDENTIALS_JSON` | No | Credenciales de Google. Una de las dos |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD` | No | Envío de correo |
 | `JWT_ALGORITHM`, `ACCESS_TOKEN_EXPIRE_MINUTES` | No | Valores por defecto razonables |
+
+## Exportación
+
+Todo sale en Excel. **La integración con Google Sheets se retiró**: la consolidación vive en la base de datos y el formato de entrega es el Excel institucional. Eso eliminó cuatro dependencias y, sobre todo, la necesidad de una cuenta de servicio de Google.
+
+| Quién | Qué puede descargar |
+|---|---|
+| Facilitador | Su consolidación individual, y todas las suyas en un solo libro |
+| Coordinador y administrador | Cualquier consolidación, el conjunto filtrado, y todo lo de una persona |
+
+En el libro por lote, las 25 columnas del contrato van primero y en su orden exacto (A a Y); las columnas de seguimiento (facilitador, estado, avance, fechas) van después, para no desplazar el contrato.
 
 ## Pruebas
 
@@ -144,7 +153,7 @@ Al arrancar se valida el contrato de 25 campos y el grafo del árbol. Si algo es
 cd backend && pytest -q
 ```
 
-227 pruebas: contrato de campos, validación del grafo, recorridos por cada rama, validaciones con sus límites, idempotencia del motor, retroceso, marcado `stale`, composición, proyección, esquema de ideas, registro y escalada de privilegios, y peticiones HTTP reales contra la aplicación con TestClient.
+228 pruebas: contrato de campos, validación del grafo, recorridos por cada rama, validaciones con sus límites, idempotencia del motor, retroceso, marcado `stale`, composición, proyección, esquema de ideas, registro y escalada de privilegios, y peticiones HTTP reales contra la aplicación con TestClient.
 
 Usan un cliente de Supabase simulado: no necesitan red ni credenciales.
 
@@ -161,7 +170,6 @@ CI en `.github/workflows/ci.yml`: ruff, mypy permisivo, pytest, y una comprobaci
 - Panel de administrador por rol. **Se eliminó el PIN en el parámetro de URL.**
 - Límite de tasa en las rutas que llaman al modelo, en el envío de correo, y por IP en el registro y el acceso.
 - El registro abierto nunca otorga un rol distinto de `facilitador`.
-- Los valores escritos en Google Sheets se sanean contra inyección de fórmulas.
 - RLS activo en las nueve tablas, con `anon` y `authenticated` revocados.
 
 ### Pendiente y urgente
@@ -189,7 +197,7 @@ Distinguir lo probado de lo que solo compila:
 **No verificado**
 - **Las migraciones SQL no se han ejecutado contra ninguna base de datos.** Están escritas y revisadas, no probadas.
 - No se ha hecho ningún recorrido end-to-end contra un Supabase real.
-- No se ha probado la escritura en Google Sheets ni el envío de correo.
+- No se ha probado el envío de correo.
 - No se ha llamado a la API de Anthropic: la etapa de análisis solo se probó con el cliente simulado.
 - El despliegue en Railway no se ha reintentado tras estos cambios.
 
@@ -205,6 +213,6 @@ Distinguir lo probado de lo que solo compila:
 
 ## Contrato de los 25 campos
 
-El orden, las claves y los encabezados están en `app/domain/fields.py` y **no se modifican**: el Excel institucional y la hoja de Google dependen de ellos. Bloque 1 identificación y diseño (16 campos), bloque 2 informe de ejecución (4), bloque 3 evaluación (5).
+El orden, las claves y los encabezados están en `app/domain/fields.py` y **no se modifican**: el Excel institucional depende de ellos. Bloque 1 identificación y diseño (16 campos), bloque 2 informe de ejecución (4), bloque 3 evaluación (5).
 
-Cualquier cambio debe hacerse en `fields.py`; `google_sheets_service`, `excel_service` y `email_service` importan de ahí. La prueba `tests/test_fields.py` falla si se desincronizan o si dejan de ser 25.
+Cualquier cambio debe hacerse en `fields.py`; `excel_service` y `email_service` importan de ahí. La prueba `tests/test_fields.py` falla si se desincronizan o si dejan de ser 25.

@@ -52,11 +52,30 @@ def test_excel_service_deriva_del_contrato():
     assert [h for h, _ in todas] == F.FIELD_HEADERS
 
 
-def test_google_sheets_service_reexporta_el_contrato():
-    from app.services import google_sheets_service as gs
+def test_ya_no_existe_el_servicio_de_google_sheets():
+    """La integración con Sheets se retiró: la exportación es Excel."""
+    import importlib
 
-    assert gs.FIELD_KEYS is F.FIELD_KEYS
-    assert gs.FIELD_HEADERS is F.FIELD_HEADERS
+    try:
+        importlib.import_module("app.services.google_sheets_service")
+    except ModuleNotFoundError:
+        return
+    raise AssertionError("google_sheets_service debería haberse eliminado.")
+
+
+def test_el_excel_por_lote_respeta_el_orden_del_contrato():
+    """Las 25 columnas van primero y en orden; el seguimiento va después."""
+    import io
+
+    from openpyxl import load_workbook
+
+    from app.services.excel_service import generate_excel_lote
+
+    libro = load_workbook(io.BytesIO(generate_excel_lote([])))
+    hoja = libro.active
+    cabeceras = [hoja.cell(1, i).value for i in range(1, len(F.FIELD_HEADERS) + 1)]
+    assert cabeceras == F.FIELD_HEADERS
+    assert hoja.cell(1, len(F.FIELD_HEADERS) + 1).value == "Facilitador"
 
 
 def test_email_service_usa_el_mismo_orden():

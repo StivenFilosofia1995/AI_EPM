@@ -38,14 +38,6 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 480
 
-    # ── Google Sheets ─────────────────────────────────────────────────────────
-    GOOGLE_SHEETS_ID: str = ""
-    GOOGLE_SHEETS_GID: str = "0"
-    # Opción 1 — archivo local
-    SERVICE_ACCOUNT_FILE: str = "service_account.json"
-    # Opción 2 — JSON completo como string (Railway)
-    GOOGLE_CREDENTIALS_JSON: str | None = None
-
     # ── Email ─────────────────────────────────────────────────────────────────
     SMTP_HOST: str = "smtp.gmail.com"
     # Puerto primario. Si STARTTLS falla, el servicio reintenta en 465 con SSL.

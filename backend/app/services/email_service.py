@@ -10,7 +10,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
 from app.config import settings
-from app.services.google_sheets_service import FIELD_HEADERS, FIELD_KEYS
+from app.domain.fields import FIELD_HEADERS, FIELD_KEYS
 
 logger = logging.getLogger(__name__)
 
@@ -38,8 +38,6 @@ _KEY_TO_HEADER = dict(zip(FIELD_KEYS, FIELD_HEADERS, strict=True))
 def _build_html(
     form_data: dict,
     facilitador: str,
-    sheets_url: str,
-    sheets_row: int,
 ) -> str:
     nombre_actividad = form_data.get("nombre") or form_data.get("id_actividad") or "Actividad EPM"
     nombre_display = facilitador or "Facilitador/a"
@@ -131,7 +129,6 @@ def _build_html(
             A continuación encontrarás el resumen de la actividad
             <strong style="color:#e0ffe0;">«{nombre_actividad}»</strong>
             que fue registrada exitosamente en el sistema de consolidación EPM
-            en la fila <strong style="color:#4ade80;">{sheets_row}</strong>
             de Google Sheets.
           </td>
         </tr>
@@ -150,7 +147,6 @@ def _build_html(
         <!-- ── CTA ── -->
         <tr>
           <td style="padding:0 36px 28px;text-align:center;">
-            <a href="{sheets_url}"
                style="display:inline-block;
                       background:linear-gradient(135deg,#16a34a,#4ade80);
                       color:#0a120a;
@@ -186,15 +182,14 @@ def _build_html(
 # ── Send (blocking, runs in thread) ─────────────────────────────────────────
 
 def _build_mime(to_email: str, form_data: dict, facilitador: str,
-                sheets_url: str, sheets_row: int) -> MIMEMultipart:
+) -> MIMEMultipart:
     nombre_actividad = (
         form_data.get("nombre") or form_data.get("id_actividad") or "Actividad EPM"
     )
-    html_body = _build_html(form_data, facilitador, sheets_url, sheets_row)
+    html_body = _build_html(form_data, facilitador)
     plain = (
         f"Hola {facilitador},\n\n"
-        f"La actividad '{nombre_actividad}' fue guardada en la fila {sheets_row}.\n"
-        f"Ver en Sheets: {sheets_url}\n\n"
+        f"La actividad '{nombre_actividad}' quedó consolidada.\n\n"
         "— Asistente IA Fundación Grupo EPM"
     )
     msg = MIMEMultipart("alternative")
@@ -210,13 +205,11 @@ def _send_sync(
     to_email: str,
     form_data: dict,
     facilitador: str,
-    sheets_url: str,
-    sheets_row: int,
 ) -> None:
     nombre_actividad = (
         form_data.get("nombre") or form_data.get("id_actividad") or "Actividad EPM"
     )
-    msg = _build_mime(to_email, form_data, facilitador, sheets_url, sheets_row)
+    msg = _build_mime(to_email, form_data, facilitador)
 
     last_exc: Exception | None = None
 
@@ -251,12 +244,10 @@ async def send_consolidation_email(
     to_email: str,
     form_data: dict,
     facilitador: str,
-    sheets_url: str,
-    sheets_row: int,
 ) -> None:
     """Async wrapper — runs SMTP in a thread pool so it doesn't block the event loop."""
     if not settings.SMTP_USER or not settings.SMTP_PASSWORD:
         raise RuntimeError("SMTP_USER / SMTP_PASSWORD no configurados en .env")
     await asyncio.to_thread(
-        _send_sync, to_email, form_data, facilitador, sheets_url, sheets_row
+        _send_sync, to_email, form_data, facilitador
     )

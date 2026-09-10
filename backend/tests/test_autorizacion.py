@@ -133,10 +133,15 @@ def test_los_endpoints_del_arbol_existen(ruta_esperada):
 
 @pytest.mark.parametrize("ruta_esperada", [
     "/api/excel/generate",
-    "/api/sheets/submit",
-    "/api/sheets/structure",
+    "/api/excel/lote",
     "/api/email/send",
     "/api/health",
 ])
 def test_los_endpoints_conservados_siguen_existiendo(ruta_esperada):
     assert ruta_esperada in {r.path for r, _ in _rutas_api()}
+
+
+def test_ya_no_hay_rutas_de_google_sheets():
+    """La integración con Sheets se retiró por completo."""
+    rutas = {r.path for r, _ in _rutas_api()}
+    assert not [r for r in rutas if "sheets" in r]
