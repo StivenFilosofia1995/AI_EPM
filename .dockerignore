@@ -1,3 +1,11 @@
+# AVISO: este archivo NO es el que se aplica en el build.
+#
+# Docker busca el .dockerignore en la raíz del CONTEXTO, y tanto
+# railway.toml como docker-compose.yml usan `backend` como contexto.
+# El archivo vigente es backend/.dockerignore.
+#
+# Este se conserva por si alguna vez se construye desde la raíz.
+
 # Control de versiones
 .git/
 .gitignore
