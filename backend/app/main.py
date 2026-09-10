@@ -21,6 +21,7 @@ from app.routes.legacy import router as legacy_router
 from app.routes.tree import router as tree_router
 from app.services.bootstrap import asegurar_admin
 from app.services.db import modo_demostracion
+from app.services.schema_check import avisar_si_falta_esquema
 
 logging.basicConfig(
     level=logging.INFO,
@@ -60,6 +61,13 @@ async def lifespan(_: FastAPI):
             "Los datos viven en memoria y se pierden en cada despliegue. "
             "Para uso real, configura Supabase y ejecuta sql/esquema_completo.sql."
         )
+
+    # Un esquema desactualizado producía un error 500 sin explicación en
+    # mitad de un formulario. Es mejor enterarse aquí.
+    try:
+        await avisar_si_falta_esquema()
+    except Exception as exc:
+        logger.warning("No se pudo verificar el esquema: %s", exc)
 
     # Decide por sí misma si corresponde crear la cuenta inicial.
     try:

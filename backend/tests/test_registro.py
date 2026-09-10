@@ -210,3 +210,63 @@ async def test_create_user_rechaza_un_rol_inventado(cliente):
             email="x@example.com", nombre="Alguien", password="password2026",
             rol="superusuario",
         )
+
+
+# ─── Esquema desactualizado ─────────────────────────────────────────────────
+# Regresión: una migración sin aplicar producía un error 500 sin explicación
+# en mitad del formulario de registro.
+
+
+async def test_falta_de_columnas_da_un_mensaje_accionable(cliente, monkeypatch):
+    """Un fallo de columna deja de ser un 500 mudo."""
+
+    class ConsultaRota:
+        def execute(self):
+            raise RuntimeError(
+                "{'code': 'PGRST204', 'message': \"Could not find the 'cargo' "
+                "column of 'epm_users' in the schema cache\"}"
+            )
+
+    tabla_real = cliente.table
+
+    class TablaRota:
+        def insert(self, *_a, **_k):
+            return ConsultaRota()
+
+        def select(self, *a, **k):
+            # La búsqueda previa por correo debe seguir funcionando.
+            return tabla_real("epm_users_vacia").select(*a, **k)
+
+    monkeypatch.setattr(
+        cliente, "table",
+        lambda n: TablaRota() if n == "epm_users" else tabla_real(n),
+    )
+
+    with pytest.raises(AuthError, match="010_perfil_y_registro"):
+        await registrar(cliente)
+
+
+async def test_el_mapa_de_requisitos_apunta_a_migraciones_reales():
+    """Cada columna exigida debe citar un archivo de migración que exista."""
+    from pathlib import Path
+
+    from app.services.schema_check import REQUISITOS
+
+    carpeta = Path(__file__).resolve().parent.parent / "sql" / "migrations"
+    archivos = {p.name for p in carpeta.glob("*.sql")}
+
+    for tabla, columnas in REQUISITOS.items():
+        for columna, archivo in columnas.items():
+            assert archivo in archivos, (
+                f"{tabla}.{columna} cita {archivo}, que no existe en migrations/"
+            )
+
+
+async def test_las_migraciones_pendientes_se_ordenan():
+    from app.services.schema_check import migraciones_pendientes
+
+    pendientes = migraciones_pendientes({
+        "epm_users": ["cargo"],
+        "epm_respuestas": ["origen"],
+    })
+    assert pendientes == ["009_origen_y_estimado.sql", "010_perfil_y_registro.sql"]

@@ -18,6 +18,7 @@ from fastapi import APIRouter
 from app.config import settings
 from app.domain.tree_loader import TreeError, get_tree
 from app.services.db import DatabaseUnavailable, get_client
+from app.services.schema_check import migraciones_pendientes, verificar_esquema
 
 logger = logging.getLogger(__name__)
 
@@ -64,17 +65,35 @@ async def health():
     """
     db = await _check_db()
     tree = _check_tree()
+
+    esquema: dict = {"estado": "ok"}
+    if db["estado"] == "ok":
+        try:
+            problemas = await verificar_esquema()
+            if problemas:
+                esquema = {
+                    "estado": "desactualizado",
+                    "faltantes": problemas,
+                    "ejecutar": migraciones_pendientes(problemas),
+                }
+        except Exception as exc:
+            esquema = {"estado": "desconocido", "detalle": str(exc)}
     modelo = {
         "estado": "ok" if settings.ANTHROPIC_API_KEY else "sin_configurar",
         "modelo": settings.ANTHROPIC_MODEL if settings.ANTHROPIC_API_KEY else None,
         "nota": "Solo se usa en la etapa de análisis e ideas.",
     }
 
-    critico_ok = db["estado"] == "ok" and tree["estado"] == "ok"
+    critico_ok = (
+        db["estado"] == "ok"
+        and tree["estado"] == "ok"
+        and esquema["estado"] in ("ok", "desconocido")
+    )
 
     return {
         "status": "healthy" if critico_ok else "degraded",
         "base_datos": db,
+        "esquema": esquema,
         "arbol": tree,
         "modelo": modelo,
     }

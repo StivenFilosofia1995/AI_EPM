@@ -178,7 +178,21 @@ async def create_user(
         "auto_registrado": auto_registrado,
         **(perfil or {}),
     }
-    result = await _run(lambda: client.table(USERS).insert(record).execute())
+    try:
+        result = await _run(lambda: client.table(USERS).insert(record).execute())
+    except Exception as exc:
+        mensaje = str(exc)
+        # PostgREST nombra la columna inexistente. Traducirlo evita que el
+        # usuario vea un 500 sin explicación cuando falta una migración.
+        if "column" in mensaje.lower() or "PGRST204" in mensaje:
+            logger.error("Esquema desactualizado al crear la cuenta: %s", mensaje)
+            raise AuthError(
+                "La base de datos no tiene las columnas de perfil. Ejecuta la "
+                "migración backend/sql/migrations/010_perfil_y_registro.sql en "
+                "Supabase, o vuelve a pegar esquema_completo.sql."
+            ) from exc
+        raise
+
     rows = result.data or []
     if not rows:
         raise AuthError("No se pudo crear la cuenta.")
