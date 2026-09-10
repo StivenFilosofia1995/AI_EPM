@@ -60,7 +60,12 @@ async def lifespan(_: FastAPI):
             "Los datos viven en memoria y se pierden en cada despliegue. "
             "Para uso real, configura Supabase y ejecuta sql/esquema_completo.sql."
         )
+
+    # Decide por sí misma si corresponde crear la cuenta inicial.
+    try:
         await asegurar_admin()
+    except Exception as exc:
+        logger.error("No se pudo preparar la cuenta inicial: %s", exc)
 
     yield
 

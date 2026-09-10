@@ -57,10 +57,22 @@ def _anunciar(correo: str, password: str | None, origen: str) -> None:
 
 async def asegurar_admin() -> None:
     """
-    Crea la cuenta de administrador si no existe. No hace nada cuando hay
-    Supabase configurado: allí la cuenta se crea con scripts/crear_admin.py.
+    Crea la cuenta de administrador si todavía no existe.
+
+    Actúa en dos situaciones:
+
+      · Modo demostración: siempre, para que la aplicación sea usable sin
+        configurar nada.
+      · Con Supabase: solo si ADMIN_EMAIL y ADMIN_PASSWORD están en el
+        entorno. Es la vía para arrancar en Railway, donde no hay una
+        terminal a mano para ejecutar scripts/crear_admin.py.
+
+    Nunca sobrescribe una cuenta existente ni cambia su contraseña.
     """
-    if not modo_demostracion():
+    demo = modo_demostracion()
+    con_variables = bool(settings.ADMIN_EMAIL and settings.ADMIN_PASSWORD)
+
+    if not demo and not con_variables:
         return
 
     correo = (settings.ADMIN_EMAIL or CORREO_POR_DEFECTO).strip().lower()
@@ -72,12 +84,24 @@ async def asegurar_admin() -> None:
         return
 
     if existente:
-        _anunciar(correo, None, "")
+        if demo:
+            _anunciar(correo, None, "")
+        else:
+            logger.info("La cuenta de administrador %s ya existe.", correo)
         return
 
     if settings.ADMIN_PASSWORD:
         password = settings.ADMIN_PASSWORD
         origen = "Definida en la variable de entorno ADMIN_PASSWORD."
+    elif not demo:
+        # Sin Supabase no pasa nada: en demostración se anuncia. Con base de
+        # datos real, generar una contraseña y escribirla en los registros
+        # sería dejarla expuesta en el panel de despliegue.
+        logger.warning(
+            "ADMIN_EMAIL está definido pero ADMIN_PASSWORD no. No se crea la "
+            "cuenta: define ambas o usa scripts/crear_admin.py."
+        )
+        return
     else:
         password = _generar_password()
         origen = (
@@ -98,4 +122,9 @@ async def asegurar_admin() -> None:
         logger.error("No se pudo crear la cuenta de administrador: %s", exc)
         return
 
-    _anunciar(correo, password, origen)
+    if demo:
+        _anunciar(correo, password, origen)
+    else:
+        # Con base de datos real no se imprime la contraseña: el titular ya
+        # la conoce, porque la definió él en las variables de entorno.
+        logger.info("Cuenta de administrador creada: %s", correo)
