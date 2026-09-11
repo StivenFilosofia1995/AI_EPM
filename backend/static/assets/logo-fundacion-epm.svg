@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 210 60" width="210" height="60"
+     role="img" aria-label="Fundación Grupo EPM">
+  <title>Fundación Grupo EPM</title>
+  <!--
+    Reconstrucción tipográfica del logotipo institucional, pensada para fondo
+    oscuro. NO es el archivo oficial de marca.
+
+    Cuando tengas el SVG o PNG oficial de la Fundación Grupo EPM, sustitúyelo
+    con:  python scripts/generar_logo_base64.py ruta/al/logo-oficial.svg
+    Eso regenera static/js/logo.js y el logo cambia en las dos vistas.
+  -->
+  <g font-family="'Inter', 'Segoe UI', Arial, Helvetica, sans-serif" font-size="23">
+    <text x="0" y="24" fill="#D5D7E0" font-weight="400" letter-spacing="-0.4">Fundación</text>
+    <text x="0" y="51" fill="#D5D7E0" font-weight="400" letter-spacing="-0.4">Grupo</text>
+    <circle cx="78" cy="43.5" r="4.6" fill="#00A650"/>
+    <text x="88" y="51" fill="#00A650" font-weight="700" letter-spacing="-0.6">epm</text>
+  </g>
+</svg>

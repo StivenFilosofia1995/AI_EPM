@@ -1,0 +1,72 @@
+# Este es el .dockerignore vigente.
+#
+# El contexto de build es la RAÍZ del repositorio, así que Docker busca este
+# archivo aquí y los patrones son relativos a la raíz.
+
+# ─── Control de versiones ───────────────────────────────────────────────────
+.git/
+.gitignore
+.gitattributes
+
+# ─── Credenciales y entorno — nunca deben entrar a la imagen ────────────────
+.env
+*.env
+!backend/.env.example
+backend/service_account.json
+service_account.json
+*-service-account.json
+credentials.json
+client_secret*.json
+*.pem
+*.key
+*.p12
+
+# ─── Python ─────────────────────────────────────────────────────────────────
+**/__pycache__/
+**/*.py[cod]
+**/*.pyo
+**/*.pyd
+**/*.egg-info/
+.eggs/
+dist/
+build/
+venv/
+.venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# ─── Pruebas y herramientas de desarrollo ───────────────────────────────────
+# No se ejecutan dentro de la imagen.
+backend/tests/
+backend/requirements-dev.txt
+backend/pytest.ini
+backend/pyproject.toml
+.github/
+
+# ─── SQL ────────────────────────────────────────────────────────────────────
+# Las migraciones se ejecutan en Supabase, no en el contenedor.
+backend/sql/
+
+# ─── Datos y artefactos locales ─────────────────────────────────────────────
+backend/datos_demo.json
+*.xlsx
+*.log
+uploads/
+
+# ─── Documentación ──────────────────────────────────────────────────────────
+docs/
+*.md
+
+# ─── IDE, sistema operativo y orquestación local ────────────────────────────
+.vscode/
+.idea/
+.claude/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+docker-compose.yml

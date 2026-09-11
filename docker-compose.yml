@@ -1,37 +1,33 @@
-version: "3.9"
+# Entorno local. Ya no levanta Ollama: el proyecto solo usa Anthropic, y
+# únicamente en la etapa de análisis e ideas. La captura de datos funciona
+# sin ningún modelo.
+#
+# Requiere backend/.env con las credenciales reales. Ese archivo está en
+# .gitignore: nunca escribas valores reales en .env.example.
 
 services:
   backend:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      # Mismo contexto que Railway: la raíz del repositorio. Si difiere, el
+      # Dockerfile funciona en un sitio y falla en el otro.
+      context: .
+      dockerfile: backend/Dockerfile
     ports:
       - "8000:8000"
+    env_file:
+      - ./backend/.env
     environment:
-      - PRIMARY_ENGINE=ollama
-      - OLLAMA_BASE_URL=http://ollama:11434/v1
-      - OLLAMA_MODEL=qwen2.5:1.5b
-      - TEMPERATURE=0.4
-      - MAX_TOKENS=1500
-      - CORS_ORIGINS=*
-    depends_on:
-      ollama:
-        condition: service_healthy
+      # Sobrescribe lo que haga falta para desarrollo local.
+      - CORS_ORIGINS=http://localhost:8000
+      - PORT=8000
     volumes:
+      # Solo lectura: el contenedor no debe modificar el código fuente.
       - ./backend/app:/app/app:ro
       - ./backend/static:/app/static:ro
-
-  ollama:
-    image: ollama/ollama:latest
-    ports:
-      - "11434:11434"
-    volumes:
-      - ollama_data:/root/.ollama
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
-      interval: 10s
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/api/health').status==200 else 1)\""]
+      interval: 20s
       timeout: 5s
-      retries: 5
-
-volumes:
-  ollama_data:
+      retries: 3
+      start_period: 15s
+    restart: unless-stopped

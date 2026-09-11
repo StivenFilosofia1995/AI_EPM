@@ -1,617 +1,528 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="es-CO">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>EPM — Panel de Trazabilidad</title>
-  <link rel="icon" type="image/svg+xml" href="/static/assets/favicon.svg" />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Panel de administración — Fundación EPM</title>
+  <link rel="icon" href="/static/assets/favicon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="/static/css/styles.css?v=2.3.1" />
+  <link rel="stylesheet" href="/static/css/tree.css?v=2.3.1" />
   <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    :root {
-      --bg: #0a120a;
-      --surface: #111b11;
-      --surface2: #172117;
-      --border: #243824;
-      --green: #4ade80;
-      --green2: #16a34a;
-      --text: #d4f0d4;
-      --muted: #6a9a6a;
-      --danger: #ef4444;
-      --warn: #f59e0b;
+    .admin-shell { max-width: 1280px; margin: 0 auto; padding: 26px 22px; }
+    .admin-cab {
+      display: flex; align-items: center; gap: 14px;
+      padding-bottom: 18px; margin-bottom: 22px; border-bottom: 1px solid var(--border);
     }
-    body { background: var(--bg); color: var(--text); font-family: 'Inter', sans-serif; min-height: 100vh; }
-
-    /* ── Header ── */
-    .header {
-      background: var(--surface);
-      border-bottom: 1px solid var(--border);
-      padding: 0 28px;
-      height: 56px;
-      display: flex;
-      align-items: center;
-      gap: 16px;
-      position: sticky;
-      top: 0;
-      z-index: 100;
+    .admin-cab h1 { font-size: 19px; font-weight: 700; flex: 1; }
+    .tarjetas { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 24px; }
+    .tarjeta {
+      background: var(--glass); border: 1px solid var(--border);
+      border-radius: var(--radius-sm); padding: 15px;
     }
-    .logo-badge { background: var(--green); color: #0a120a; font-weight: 900; font-size: 15px; letter-spacing: 2px; padding: 4px 12px; border-radius: 5px; }
-    .header-title { font-size: 15px; font-weight: 600; color: var(--text); }
-    .header-sub { font-size: 12px; color: var(--muted); margin-left: 4px; }
-    .header-spacer { flex: 1; }
-    .btn-back { background: var(--surface2); border: 1px solid var(--border); color: var(--muted); padding: 6px 14px; border-radius: 7px; font-size: 13px; cursor: pointer; text-decoration: none; transition: color .15s; }
-    .btn-back:hover { color: var(--text); }
-
-    /* ── Pin Screen ── */
-    #pinScreen {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      min-height: calc(100vh - 56px);
+    .tarjeta .cifra { font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums; }
+    .tarjeta .rotulo { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: .6px; margin-top: 3px; }
+    .pestanas { display: flex; gap: 6px; margin-bottom: 20px; flex-wrap: wrap; }
+    .pestana {
+      padding: 8px 15px; border-radius: var(--radius-sm); cursor: pointer;
+      border: 1px solid var(--border); background: transparent;
+      color: var(--text-dim); font-size: 13px; font-weight: 600; font-family: var(--font);
     }
-    .pin-card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 14px;
-      padding: 40px 36px;
-      width: 360px;
-      text-align: center;
-    }
-    .pin-logo { background: var(--green); color: #0a120a; font-weight: 900; font-size: 22px; letter-spacing: 3px; padding: 6px 18px; border-radius: 6px; display: inline-block; margin-bottom: 20px; }
-    .pin-card h2 { font-size: 18px; font-weight: 700; margin-bottom: 8px; }
-    .pin-card p { font-size: 13px; color: var(--muted); margin-bottom: 24px; }
-    .pin-card input {
-      width: 100%; padding: 11px 14px; background: var(--surface2);
-      border: 1px solid var(--border); border-radius: 8px; color: var(--text);
-      font-size: 15px; text-align: center; letter-spacing: 4px; outline: none;
-    }
-    .pin-card input:focus { border-color: var(--green); }
-    .pin-card button {
-      width: 100%; margin-top: 14px; padding: 12px;
-      background: var(--green2); color: #fff; border: none;
-      border-radius: 8px; font-size: 14px; font-weight: 600;
-      cursor: pointer; transition: opacity .15s;
-    }
-    .pin-card button:hover { opacity: .85; }
-    .pin-error { color: var(--danger); font-size: 13px; margin-top: 10px; display: none; }
-
-    /* ── Dashboard ── */
-    #dashboard { display: none; padding: 28px; max-width: 1400px; margin: 0 auto; }
-
-    /* Stats */
-    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 28px; }
-    .stat-card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 20px 24px;
-    }
-    .stat-label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .8px; margin-bottom: 8px; }
-    .stat-value { font-size: 32px; font-weight: 700; color: var(--green); }
-    .stat-sub { font-size: 12px; color: var(--muted); margin-top: 4px; }
-
-    /* Toolbar */
-    .toolbar {
-      display: flex;
-      gap: 12px;
-      align-items: center;
-      margin-bottom: 20px;
-      flex-wrap: wrap;
-    }
-    .search-box {
-      flex: 1;
-      min-width: 220px;
-      padding: 9px 14px;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      color: var(--text);
-      font-size: 13px;
-      outline: none;
-    }
-    .search-box:focus { border-color: var(--green); }
-    .tab-btn {
-      padding: 8px 18px;
-      border-radius: 8px;
-      border: 1px solid var(--border);
-      background: var(--surface);
-      color: var(--muted);
-      font-size: 13px;
-      cursor: pointer;
-      transition: all .15s;
-    }
-    .tab-btn.active { background: var(--green2); border-color: var(--green2); color: #fff; }
-
-    /* Tables */
-    .table-wrap { overflow-x: auto; }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 13px;
-    }
-    th {
-      background: var(--surface2);
-      color: var(--muted);
-      padding: 10px 14px;
-      text-align: left;
-      font-weight: 600;
-      font-size: 11px;
-      text-transform: uppercase;
-      letter-spacing: .7px;
-      border-bottom: 1px solid var(--border);
-      white-space: nowrap;
-    }
-    td {
-      padding: 11px 14px;
-      border-bottom: 1px solid var(--border);
-      vertical-align: middle;
-      color: var(--text);
-    }
-    tr:hover td { background: var(--surface2); }
-    .badge {
-      display: inline-block;
-      padding: 2px 9px;
-      border-radius: 20px;
-      font-size: 11px;
-      font-weight: 600;
-    }
-    .badge-green { background: rgba(74,222,128,.15); color: var(--green); }
-    .badge-gray  { background: rgba(255,255,255,.06); color: var(--muted); }
-    .btn-view {
-      padding: 5px 12px;
-      border-radius: 6px;
-      border: 1px solid var(--border);
-      background: transparent;
-      color: var(--muted);
-      font-size: 12px;
-      cursor: pointer;
-      transition: all .15s;
-    }
-    .btn-view:hover { border-color: var(--green); color: var(--green); }
-    .user-row { font-weight: 600; color: var(--green); }
-
-    /* Section */
-    .section { margin-bottom: 32px; }
-    .section-title {
-      font-size: 14px;
-      font-weight: 700;
-      color: var(--text);
-      margin-bottom: 12px;
-      padding-bottom: 8px;
-      border-bottom: 1px solid var(--border);
-    }
-    .section-card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      overflow: hidden;
-    }
-
-    /* User cards */
-    .user-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
-    .user-card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 20px;
-      cursor: pointer;
-      transition: border-color .15s;
-    }
-    .user-card:hover { border-color: var(--green); }
-    .user-avatar {
-      width: 44px; height: 44px;
-      border-radius: 50%;
-      background: rgba(74,222,128,.15);
-      border: 1.5px solid var(--green);
-      display: flex; align-items: center; justify-content: center;
-      font-size: 16px; font-weight: 700; color: var(--green);
-      margin-bottom: 12px;
-    }
-    .user-name { font-size: 15px; font-weight: 700; margin-bottom: 4px; }
-    .user-meta { font-size: 12px; color: var(--muted); }
-    .user-sessions { font-size: 11px; color: var(--muted); margin-top: 8px; }
-    .user-sessions span { color: var(--green); font-weight: 600; }
-
-    /* Modal */
-    .modal-bg {
-      position: fixed; inset: 0;
-      background: rgba(0,0,0,.7);
-      display: flex; align-items: flex-start; justify-content: center;
-      padding: 40px 16px;
-      z-index: 999;
-      overflow-y: auto;
+    .pestana.activa { background: var(--green-dim); border-color: var(--green); color: #4ade80; }
+    .filtros { display: flex; gap: 9px; flex-wrap: wrap; margin-bottom: 18px; align-items: flex-end; }
+    .filtros .campo { margin-bottom: 0; min-width: 145px; }
+    .tabla-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius-sm); }
+    .tabla-resumen tbody tr:hover { background: var(--glass); }
+    .clickable { cursor: pointer; }
+    .modal-fondo {
+      position: fixed; inset: 0; background: rgba(0,0,0,.75); z-index: 300;
+      display: flex; align-items: flex-start; justify-content: center; padding: 34px 18px; overflow-y: auto;
     }
     .modal {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 14px;
-      width: 100%;
-      max-width: 820px;
-      padding: 28px;
+      background: var(--bg-2); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 26px; max-width: 940px; width: 100%;
     }
-    .modal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
-    .modal-title { font-size: 16px; font-weight: 700; }
-    .modal-close { background: none; border: none; color: var(--muted); font-size: 22px; cursor: pointer; }
-    .modal-close:hover { color: var(--text); }
-    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-    .form-field { padding: 10px 12px; background: var(--surface2); border-radius: 8px; border: 1px solid var(--border); }
-    .form-field .key { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .7px; margin-bottom: 3px; }
-    .form-field .val { font-size: 13px; color: var(--text); word-break: break-word; }
-    .form-field.full { grid-column: 1 / -1; }
-    .chat-log { max-height: 400px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; margin-top: 16px; }
-    .chat-msg { padding: 10px 14px; border-radius: 8px; font-size: 13px; line-height: 1.5; }
-    .chat-msg.user { background: rgba(74,222,128,.08); border: 1px solid rgba(74,222,128,.2); align-self: flex-end; max-width: 75%; }
-    .chat-msg.assistant { background: var(--surface2); border: 1px solid var(--border); align-self: flex-start; max-width: 85%; }
-    .chat-role { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .8px; margin-bottom: 4px; }
-    .chat-role.user { color: var(--green); }
-    .chat-role.assistant { color: var(--muted); }
-    .modal-tabs { display: flex; gap: 8px; margin-bottom: 16px; }
-    .modal-tab { padding: 6px 16px; border-radius: 7px; border: 1px solid var(--border); background: var(--surface2); color: var(--muted); font-size: 13px; cursor: pointer; }
-    .modal-tab.active { background: var(--green2); border-color: var(--green2); color: #fff; }
-    .section-header { font-size: 12px; font-weight: 700; color: var(--green); text-transform: uppercase; letter-spacing: .8px; margin: 16px 0 8px; padding-bottom: 4px; border-bottom: 1px solid var(--border); }
-
-    /* Loading */
-    .loading { text-align: center; padding: 60px; color: var(--muted); font-size: 14px; }
-    .empty { text-align: center; padding: 40px; color: var(--muted); font-size: 13px; }
-
-    @media (max-width: 600px) {
-      .form-grid { grid-template-columns: 1fr; }
-      #dashboard { padding: 16px; }
-    }
+    .hist { margin-top: 7px; padding-left: 13px; border-left: 2px solid var(--blue-dim); font-size: 12px; color: var(--text-dim); }
+    .marca-origen { font-size: 10px; padding: 1px 6px; border-radius: 3px; margin-left: 6px; }
+    .origen-sugerencia_ia { background: var(--blue-dim); color: #7dd3fc; }
+    .origen-sugerencia_editada { background: rgba(251,191,36,.18); color: #fcd34d; }
   </style>
 </head>
 <body>
 
-<!-- Header -->
-<header class="header">
-  <div class="logo-badge">epm</div>
-  <span class="header-title">Panel de Trazabilidad</span>
-  <span class="header-sub">Administración</span>
-  <div class="header-spacer"></div>
-  <a href="/" class="btn-back">← Volver al Chat</a>
-</header>
-
-<!-- PIN Screen -->
-<div id="pinScreen">
-  <div class="pin-card">
-    <div class="pin-logo">epm</div>
-    <h2>Acceso Administrativo</h2>
-    <p>Ingresa el PIN para ver los datos de consolidación de todos los facilitadores.</p>
-    <input type="password" id="pinInput" placeholder="••••••••" maxlength="20" autocomplete="off" />
-    <button id="pinBtn">Ingresar</button>
-    <p class="pin-error" id="pinError">PIN incorrecto. Intenta de nuevo.</p>
-  </div>
-</div>
-
-<!-- Dashboard -->
-<div id="dashboard">
-  <!-- Stats -->
-  <div class="stats">
-    <div class="stat-card">
-      <div class="stat-label">Facilitadores</div>
-      <div class="stat-value" id="statUsers">—</div>
-      <div class="stat-sub">usuarios únicos</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-label">Actividades</div>
-      <div class="stat-value" id="statActividades">—</div>
-      <div class="stat-sub">consolidaciones guardadas</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-label">Sesiones</div>
-      <div class="stat-value" id="statSessions">—</div>
-      <div class="stat-sub">conversaciones totales</div>
-    </div>
-  </div>
-
-  <!-- Toolbar -->
-  <div class="toolbar">
-    <input type="text" class="search-box" id="searchBox" placeholder="Buscar por facilitador, actividad, programa…" />
-    <button class="tab-btn active" id="tabActividades" onclick="switchTab('actividades')">Actividades</button>
-    <button class="tab-btn" id="tabFacilitadores" onclick="switchTab('facilitadores')">Facilitadores</button>
-  </div>
-
-  <!-- Tab: Actividades -->
-  <div id="viewActividades">
-    <div class="section">
-      <div class="section-card">
-        <div class="table-wrap">
-          <table id="actividadesTable">
-            <thead>
-              <tr>
-                <th>Facilitador</th>
-                <th>ID Actividad</th>
-                <th>Nombre</th>
-                <th>Programa</th>
-                <th>Tipo</th>
-                <th>Fecha</th>
-                <th>% Cumpl.</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody id="actividadesTbody">
-              <tr><td colspan="8" class="loading">Cargando datos…</td></tr>
-            </tbody>
-          </table>
-        </div>
+<div class="acceso" id="pantallaAcceso">
+  <div class="acceso-card">
+    <div class="acceso-logo" data-logo-epm="34px"></div>
+    <h1>Panel de administración</h1>
+    <p class="sub">Requiere rol de administrador o coordinador.</p>
+    <form id="formAcceso" novalidate>
+      <div class="campo">
+        <label for="email">Correo institucional</label>
+        <input type="email" id="email" autocomplete="username" required autofocus />
       </div>
-    </div>
-  </div>
-
-  <!-- Tab: Facilitadores -->
-  <div id="viewFacilitadores" style="display:none">
-    <div class="user-grid" id="userGrid">
-      <div class="loading">Cargando usuarios…</div>
-    </div>
-  </div>
-</div>
-
-<!-- Detail Modal -->
-<div class="modal-bg" id="modalBg" style="display:none" onclick="closeModal(event)">
-  <div class="modal" id="modalBox">
-    <div class="modal-header">
-      <div class="modal-title" id="modalTitle">Detalle de Actividad</div>
-      <button class="modal-close" onclick="document.getElementById('modalBg').style.display='none'">✕</button>
-    </div>
-    <div class="modal-tabs">
-      <button class="modal-tab active" id="mtab1" onclick="switchModalTab('form')">Formulario</button>
-      <button class="modal-tab" id="mtab2" onclick="switchModalTab('chat')">Conversación</button>
-    </div>
-    <div id="modalFormView"></div>
-    <div id="modalChatView" style="display:none"></div>
+      <div class="campo">
+        <label for="password">Contraseña</label>
+        <input type="password" id="password" autocomplete="current-password" required />
+      </div>
+      <button type="submit" class="btn btn-primario btn-bloque">Ingresar</button>
+    </form>
+    <div class="error-caja oculto" id="errorAcceso" role="alert" aria-live="assertive"></div>
   </div>
 </div>
 
+<div class="admin-shell oculto" id="app">
+  <header class="admin-cab">
+    <div class="marca-logo" data-logo-epm="28px"></div>
+    <h1>Panel de administración</h1>
+    <span id="usuarioInfo" style="font-size:13px;color:var(--text-dim)"></span>
+    <button class="btn" id="btnSalir">Salir</button>
+  </header>
+
+  <div class="tarjetas" id="tarjetas"></div>
+
+  <nav class="pestanas" role="tablist">
+    <button class="pestana activa" data-vista="sesiones" role="tab">Sesiones</button>
+    <button class="pestana" data-vista="usuarios" role="tab">Avance por facilitador</button>
+    <button class="pestana" data-vista="campos" role="tab">Campos problemáticos</button>
+    <button class="pestana" data-vista="sugerencias" role="tab">Uso de sugerencias</button>
+    <button class="pestana" data-vista="cuentas" role="tab">Cuentas</button>
+  </nav>
+
+  <div id="avisos" aria-live="polite"></div>
+  <div id="contenido"></div>
+</div>
+
+<script src="/static/js/logo.js?v=2.3.1"></script>
 <script>
 'use strict';
+const TOKEN_KEY = 'epm_token';
+let TOKEN = localStorage.getItem(TOKEN_KEY) || '';
+let USUARIO = null;
+let VISTA = 'sesiones';
 
-const FIELD_KEYS = [
-  "id_actividad","programa","linea_accion","tipo_actividad","nombre",
-  "publico","publico_especifico","lugar","responsable","duracion",
-  "pregunta_problematizadora","ods","metodologia","descripcion_sesion",
-  "recursos","fecha","logros","retos","observaciones","comentarios",
-  "instrumento_evaluativo","participantes_evaluados","cumplimiento_objetivos",
-  "acciones_mejora","porcentaje_cumplimiento"
-];
-const FIELD_HEADERS = [
-  "ID Actividad","Programa / Proyecto","Línea de Acción","Tipo de Actividad",
-  "Nombre de la Actividad","Público","Público Específico","Lugar","Responsable",
-  "Duración Total Sesión","Pregunta Problematizadora","ODS","Metodología",
-  "Descripción de la Sesión","Recursos y/o Materiales","Fecha","Logros",
-  "Retos / Dificultades","Observaciones","Comentarios de Participantes",
-  "Instrumento Evaluativo","# Participantes Evaluados","Cumplimiento de Objetivos",
-  "Acciones de Mejora","% Cumplimiento Evaluación"
-];
-const SECTIONS = [
-  { title: "Bloque 1 — Identificación y Planeación", keys: FIELD_KEYS.slice(0, 16) },
-  { title: "Bloque 2 — Informe de Ejecución",        keys: FIELD_KEYS.slice(16, 20) },
-  { title: "Bloque 3 — Evaluación",                  keys: FIELD_KEYS.slice(20) },
-];
-
-let _pin = '';
-let _data = null;
-let _currentTab = 'actividades';
-let _currentModalTab = 'form';
-let _currentSessionId = null;
-
-// ── PIN ───────────────────────────────────────────────────────────────────────
-document.getElementById('pinBtn').addEventListener('click', tryPin);
-document.getElementById('pinInput').addEventListener('keydown', e => { if (e.key === 'Enter') tryPin(); });
-
-async function tryPin() {
-  const pin = document.getElementById('pinInput').value.trim();
-  if (!pin) return;
-  document.getElementById('pinBtn').textContent = 'Verificando…';
-  try {
-    const r = await fetch(`/api/admin/data?pin=${encodeURIComponent(pin)}`);
-    if (!r.ok) throw new Error('PIN incorrecto');
-    _pin = pin;
-    _data = await r.json();
-    renderDashboard();
-    document.getElementById('pinScreen').style.display = 'none';
-    document.getElementById('dashboard').style.display = 'block';
-  } catch {
-    document.getElementById('pinError').style.display = 'block';
-    document.getElementById('pinBtn').textContent = 'Ingresar';
+const $ = (s) => document.querySelector(s);
+const el = (tag, attrs = {}, ...hijos) => {
+  const n = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === 'class') n.className = v;
+    else if (k === 'text') n.textContent = v;
+    else if (k.startsWith('on')) n.addEventListener(k.slice(2), v);
+    else if (v !== null && v !== undefined && v !== false) n.setAttribute(k, v);
   }
+  for (const h of hijos) { if (h != null) n.appendChild(typeof h === 'string' ? document.createTextNode(h) : h); }
+  return n;
+};
+
+function aviso(texto, tipo = 'error') {
+  $('#avisos').innerHTML = '';
+  $('#avisos').appendChild(el('div', { class: `aviso aviso-${tipo}`, text: texto }));
 }
 
-// ── Render ────────────────────────────────────────────────────────────────────
-function renderDashboard() {
-  document.getElementById('statUsers').textContent = _data.total_users;
-  document.getElementById('statActividades').textContent = _data.total_actividades;
-  document.getElementById('statSessions').textContent = _data.total_sessions;
-  renderActividades();
-  renderFacilitadores();
-  document.getElementById('searchBox').addEventListener('input', onSearch);
+async function api(ruta, opciones = {}) {
+  const cfg = { method: opciones.method || 'GET', headers: { 'Content-Type': 'application/json' } };
+  if (TOKEN) cfg.headers['Authorization'] = `Bearer ${TOKEN}`;
+  if (opciones.body !== undefined) cfg.body = JSON.stringify(opciones.body);
+  const r = await fetch(ruta, cfg);
+  if (r.status === 401) { salir(); throw new Error('La sesión expiró.'); }
+  let d = null; try { d = await r.json(); } catch {}
+  if (!r.ok) throw new Error((d && typeof d.detail === 'string' ? d.detail : `Error ${r.status}.`));
+  return d;
 }
 
-function renderActividades(filter = '') {
-  const tbody = document.getElementById('actividadesTbody');
-  const rows = _data.actividades.filter(a => {
-    if (!filter) return true;
-    const q = filter.toLowerCase();
-    return (
-      (a.session_id && matchUser(a.session_id, q)) ||
-      (a.nombre || '').toLowerCase().includes(q) ||
-      (a.id_actividad || '').toLowerCase().includes(q) ||
-      (a.programa || '').toLowerCase().includes(q) ||
-      (a.responsable || '').toLowerCase().includes(q)
-    );
+function fecha(iso) {
+  if (!iso) return '—';
+  try { return new Date(iso).toLocaleString('es-CO', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' }); }
+  catch { return iso; }
+}
+
+// ── Acceso ──────────────────────────────────────────────────────────────
+$('#formAcceso').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const err = $('#errorAcceso');
+  err.classList.add('oculto');
+  try {
+    const d = await api('/api/auth/login', { method: 'POST', body: { email: $('#email').value.trim(), password: $('#password').value } });
+    if (!['admin', 'coordinador'].includes(d.user.rol)) {
+      err.textContent = 'Esta cuenta no tiene permisos de administración.';
+      err.classList.remove('oculto');
+      return;
+    }
+    TOKEN = d.access_token;
+    localStorage.setItem(TOKEN_KEY, TOKEN);
+    USUARIO = d.user;
+    await iniciar();
+  } catch (ex) {
+    err.textContent = ex.message;
+    err.classList.remove('oculto');
+  }
+});
+
+function salir() {
+  localStorage.removeItem(TOKEN_KEY);
+  TOKEN = ''; USUARIO = null;
+  $('#app').classList.add('oculto');
+  $('#pantallaAcceso').classList.remove('oculto');
+}
+$('#btnSalir').addEventListener('click', salir);
+
+// ── Inicio ──────────────────────────────────────────────────────────────
+async function iniciar() {
+  if (!USUARIO) USUARIO = await api('/api/auth/me');
+  if (!['admin', 'coordinador'].includes(USUARIO.rol)) { salir(); return; }
+
+  $('#usuarioInfo').textContent = `${USUARIO.nombre} · ${USUARIO.rol}`;
+  $('#pantallaAcceso').classList.add('oculto');
+  $('#app').classList.remove('oculto');
+
+  document.querySelectorAll('.pestana').forEach(p => {
+    p.addEventListener('click', () => {
+      document.querySelectorAll('.pestana').forEach(x => x.classList.remove('activa'));
+      p.classList.add('activa');
+      VISTA = p.dataset.vista;
+      pintar();
+    });
   });
 
-  if (!rows.length) {
-    tbody.innerHTML = `<tr><td colspan="8" class="empty">No se encontraron actividades.</td></tr>`;
-    return;
-  }
-
-  // Build user map
-  const userMap = buildUserMap();
-
-  tbody.innerHTML = rows.map(a => {
-    const user = userMap[a.session_id] || '—';
-    const pct = a.porcentaje_cumplimiento;
-    const badge = pct
-      ? `<span class="badge badge-green">${pct}</span>`
-      : `<span class="badge badge-gray">—</span>`;
-    return `<tr>
-      <td class="user-row">${esc(user)}</td>
-      <td>${esc(a.id_actividad || '—')}</td>
-      <td>${esc(a.nombre || '—')}</td>
-      <td>${esc(a.programa || '—')}</td>
-      <td>${esc(a.tipo_actividad || '—')}</td>
-      <td>${esc(a.fecha || '—')}</td>
-      <td>${badge}</td>
-      <td><button class="btn-view" onclick="openModal('${a.session_id}')">Ver →</button></td>
-    </tr>`;
-  }).join('');
-}
-
-function renderFacilitadores(filter = '') {
-  const grid = document.getElementById('userGrid');
-  const usersData = _data.users;
-  const entries = Object.entries(usersData).filter(([name]) =>
-    !filter || name.toLowerCase().includes(filter.toLowerCase())
-  );
-  if (!entries.length) {
-    grid.innerHTML = `<div class="empty">No se encontraron facilitadores.</div>`;
-    return;
-  }
-  grid.innerHTML = entries.map(([name, sessions]) => {
-    const actividades = sessions.filter(s => s.actividad).length;
-    const initials = name.split(' ').slice(0,2).map(w=>w[0]||'').join('').toUpperCase() || name[0].toUpperCase();
-    const last = sessions[0]?.created_at ? new Date(sessions[0].created_at).toLocaleDateString('es-CO') : '—';
-    return `<div class="user-card" onclick="filterByUser('${esc(name)}')">
-      <div class="user-avatar">${esc(initials)}</div>
-      <div class="user-name">${esc(name)}</div>
-      <div class="user-meta">Última sesión: ${last}</div>
-      <div class="user-sessions">
-        <span>${sessions.length}</span> sesiones &nbsp;·&nbsp;
-        <span>${actividades}</span> actividades
-      </div>
-    </div>`;
-  }).join('');
-}
-
-function buildUserMap() {
-  const map = {};
-  for (const [name, sessions] of Object.entries(_data.users)) {
-    for (const s of sessions) {
-      map[s.session_id] = name;
+  try {
+    const r = await api('/api/admin/resumen');
+    const t = $('#tarjetas'); t.innerHTML = '';
+    const cifras = [
+      ['Sesiones totales', r.total_sesiones],
+      ['Completadas', r.por_estado.completada || 0],
+      ['En progreso', r.por_estado.en_progreso || 0],
+      ['Planeadas', r.por_estado.planeada || 0],
+      ['Facilitadores activos', r.usuarios_activos],
+      ['Versión del árbol', r.tree_version],
+    ];
+    for (const [rotulo, cifra] of cifras) {
+      t.appendChild(el('div', { class: 'tarjeta' },
+        el('div', { class: 'cifra', text: String(cifra) }),
+        el('div', { class: 'rotulo', text: rotulo })));
     }
+  } catch (ex) { aviso(ex.message); }
+
+  pintar();
+}
+
+async function pintar() {
+  const c = $('#contenido');
+  c.innerHTML = '<div class="cargando">Cargando…</div>';
+  $('#avisos').innerHTML = '';
+  try {
+    if (VISTA === 'sesiones')         await vistaSesiones(c);
+    else if (VISTA === 'usuarios')    await vistaTablaSimple(c, '/api/admin/avance-usuarios', 'usuarios');
+    else if (VISTA === 'campos')      await vistaTablaSimple(c, '/api/admin/campos-problematicos', 'campos');
+    else if (VISTA === 'sugerencias') await vistaTablaSimple(c, '/api/admin/uso-sugerencias', 'campos');
+    else if (VISTA === 'cuentas')     await vistaCuentas(c);
+  } catch (ex) { c.innerHTML = ''; aviso(ex.message); }
+}
+
+// ── Sesiones ────────────────────────────────────────────────────────────
+async function vistaSesiones(c) {
+  c.innerHTML = '';
+  const filtros = el('div', { class: 'filtros' });
+  const mk = (id, etiqueta, opciones) => {
+    const sel = el('select', { id });
+    sel.appendChild(el('option', { value: '' }, 'Todos'));
+    for (const o of opciones) sel.appendChild(el('option', { value: o }, o));
+    filtros.appendChild(el('div', { class: 'campo' }, el('label', { for: id, text: etiqueta }), sel));
+  };
+  mk('fEstado', 'Estado', ['en_progreso', 'planeada', 'completada', 'abandonada']);
+  mk('fPrograma', 'Programa', ['Biblioteca_EPM', 'Programa_UVA', 'Museo_del_Agua', 'Parque_de_los_deseos']);
+
+  const fDesde = el('input', { type: 'date', id: 'fDesde' });
+  filtros.appendChild(el('div', { class: 'campo' }, el('label', { for: 'fDesde', text: 'Desde' }), fDesde));
+  const fHasta = el('input', { type: 'date', id: 'fHasta' });
+  filtros.appendChild(el('div', { class: 'campo' }, el('label', { for: 'fHasta', text: 'Hasta' }), fHasta));
+  const fAvance = el('input', { type: 'number', id: 'fAvance', min: 0, max: 100, placeholder: '0' });
+  filtros.appendChild(el('div', { class: 'campo' }, el('label', { for: 'fAvance', text: 'Avance mínimo %' }), fAvance));
+  filtros.appendChild(el('button', { class: 'btn btn-primario', onclick: cargar, text: 'Filtrar' }));
+  filtros.appendChild(el('button', { class: 'btn', onclick: descargarLote,
+                                     text: 'Descargar Excel del filtro' }));
+  c.appendChild(filtros);
+
+  async function descargarLote() {
+    const cuerpo = {};
+    for (const [id, clave] of [['fEstado','estado'],['fPrograma','programa'],
+                               ['fDesde','desde'],['fHasta','hasta']]) {
+      const v = $('#' + id).value;
+      if (v) cuerpo[clave] = v;
+    }
+    if (window.__usuarioFiltrado) cuerpo.user_id = window.__usuarioFiltrado;
+    try {
+      const r = await fetch('/api/excel/lote', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${TOKEN}` },
+        body: JSON.stringify(cuerpo),
+      });
+      if (r.status === 404) { aviso('No hay consolidaciones que coincidan con el filtro.'); return; }
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const url = URL.createObjectURL(await r.blob());
+      const a = el('a', { href: url, download: 'consolidaciones_epm.xlsx' });
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+      aviso(`Excel descargado con ${r.headers.get('X-Total-Filas') || '?'} consolidaciones.`, 'ok');
+    } catch (ex) { aviso('No se pudo generar el Excel: ' + ex.message); }
   }
-  return map;
+
+  const zona = el('div');
+  c.appendChild(zona);
+
+  async function cargar() {
+    zona.innerHTML = '<div class="cargando">Consultando…</div>';
+    const p = new URLSearchParams();
+    for (const [id, clave] of [['fEstado','estado'],['fPrograma','programa'],['fDesde','desde'],['fHasta','hasta'],['fAvance','avance_minimo']]) {
+      const v = $('#' + id).value;
+      if (v) p.set(clave, v);
+    }
+    try {
+      const d = await api('/api/admin/sesiones?' + p.toString());
+      zona.innerHTML = '';
+      zona.appendChild(el('p', { class: 'nodo-ayuda', text: `${d.total} sesiones` }));
+      const tabla = el('table', { class: 'tabla-resumen' });
+      tabla.appendChild(el('thead', {}, el('tr', {},
+        ...['Facilitador','ID actividad','Nombre','Programa','Estado','Avance','Creada','']
+          .map(h => el('th', { text: h })))));
+      const tb = el('tbody');
+      for (const s of d.sesiones) {
+        tb.appendChild(el('tr', {},
+          el('td', { text: s.facilitador || '—' }),
+          el('td', { text: s.id_actividad || '—' }),
+          el('td', { text: s.nombre || '—' }),
+          el('td', { text: s.programa || '—' }),
+          el('td', {}, el('span', { class: 'etiqueta-bloque', text: s.estado || '—' })),
+          el('td', { text: (s.porcentaje_avance ?? 0) + '%' }),
+          el('td', { text: fecha(s.created_at) }),
+          el('td', {}, el('button', { class: 'btn', onclick: () => detalle(s.session_id), text: 'Ver' })),
+        ));
+      }
+      tabla.appendChild(tb);
+      zona.appendChild(el('div', { class: 'tabla-wrap' }, tabla));
+    } catch (ex) { zona.innerHTML = ''; aviso(ex.message); }
+  }
+  await cargar();
 }
 
-function matchUser(sessionId, q) {
-  const userMap = buildUserMap();
-  return (userMap[sessionId] || '').toLowerCase().includes(q);
-}
-
-function onSearch() {
-  const q = document.getElementById('searchBox').value.trim();
-  if (_currentTab === 'actividades') renderActividades(q);
-  else renderFacilitadores(q);
-}
-
-function filterByUser(name) {
-  document.getElementById('searchBox').value = name;
-  switchTab('actividades');
-  renderActividades(name);
-}
-
-function switchTab(tab) {
-  _currentTab = tab;
-  document.getElementById('viewActividades').style.display = tab === 'actividades' ? '' : 'none';
-  document.getElementById('viewFacilitadores').style.display = tab === 'facilitadores' ? '' : 'none';
-  document.getElementById('tabActividades').classList.toggle('active', tab === 'actividades');
-  document.getElementById('tabFacilitadores').classList.toggle('active', tab === 'facilitadores');
-  const q = document.getElementById('searchBox').value.trim();
-  if (tab === 'facilitadores') renderFacilitadores(q);
-}
-
-// ── Modal ─────────────────────────────────────────────────────────────────────
-async function openModal(sessionId) {
-  _currentSessionId = sessionId;
-  document.getElementById('modalBg').style.display = 'flex';
-  document.getElementById('modalFormView').innerHTML = '<div class="loading">Cargando…</div>';
-  document.getElementById('modalChatView').innerHTML = '';
-  switchModalTab('form');
+async function detalle(sessionId) {
+  const fondo = el('div', { class: 'modal-fondo', onclick: (e) => { if (e.target === fondo) fondo.remove(); } });
+  const modal = el('div', { class: 'modal' }, el('div', { class: 'cargando', text: 'Cargando detalle…' }));
+  fondo.appendChild(modal);
+  document.body.appendChild(fondo);
 
   try {
-    const r = await fetch(`/api/admin/session/${sessionId}?pin=${encodeURIComponent(_pin)}`);
-    const detail = await r.json();
-    renderModalForm(detail.actividad, detail.messages);
-    renderModalChat(detail.messages);
+    const d = await api(`/api/admin/sesion/${sessionId}`);
+    modal.innerHTML = '';
+    modal.appendChild(el('h2', { class: 'nodo-pregunta', text: d.sesion.nombre || 'Consolidación' }));
+    modal.appendChild(el('p', { class: 'nodo-ayuda',
+      text: `${d.sesion.facilitador || 'Sin facilitador'} · ${d.sesion.estado} · ${d.sesion.porcentaje_avance ?? 0}% · árbol ${d.sesion.tree_version || '—'}` }));
 
-    const userMap = buildUserMap();
-    const user = userMap[sessionId] || 'Sin nombre';
-    const actNombre = detail.actividad?.nombre || detail.actividad?.id_actividad || sessionId.slice(0,8);
-    document.getElementById('modalTitle').textContent = `${user} — ${actNombre}`;
-  } catch (err) {
-    document.getElementById('modalFormView').innerHTML = `<div class="empty">Error: ${err.message}</div>`;
-  }
-}
+    const tabla = el('table', { class: 'tabla-resumen' });
+    tabla.appendChild(el('thead', {}, el('tr', {},
+      ...['Campo','Valor','Respondida','Intentos','Historial'].map(h => el('th', { text: h })))));
+    const tb = el('tbody');
 
-function renderModalForm(actividad, messages) {
-  if (!actividad || Object.keys(actividad).length === 0) {
-    document.getElementById('modalFormView').innerHTML = `<div class="empty">Esta sesión no tiene actividad guardada en Supabase.</div>`;
-    return;
-  }
-  const keyToHeader = Object.fromEntries(FIELD_KEYS.map((k,i) => [k, FIELD_HEADERS[i]]));
-  let html = '';
-  for (const sec of SECTIONS) {
-    html += `<div class="section-header">${sec.title}</div><div class="form-grid">`;
-    for (const key of sec.keys) {
-      const val = actividad[key] || '—';
-      const label = keyToHeader[key] || key;
-      const full = val.length > 60 ? 'full' : '';
-      html += `<div class="form-field ${full}">
-        <div class="key">${label}</div>
-        <div class="val">${esc(val)}</div>
-      </div>`;
+    for (const r of d.respuestas) {
+      const celdaValor = el('td', { class: 'campo-valor' }, el('span', { text: r.valor || '—' }));
+      if (r.origen && r.origen !== 'propio') {
+        celdaValor.appendChild(el('span', { class: `marca-origen origen-${r.origen}`,
+          text: r.origen === 'sugerencia_ia' ? 'sugerencia' : 'sugerencia editada' }));
+      }
+      const celdaHist = el('td');
+      if (r.correcciones && r.correcciones.length) {
+        celdaHist.appendChild(el('b', { text: `${r.correcciones.length} corrección(es)` }));
+        for (const h of r.correcciones) {
+          celdaHist.appendChild(el('div', { class: 'hist', text: `v${h.version_num}: ${h.valor || '(vacío)'}` }));
+        }
+      } else { celdaHist.textContent = '—'; }
+
+      tb.appendChild(el('tr', { class: r.stale ? 'no-alcanzable' : '' },
+        el('td', { text: r.header || r.node_id }),
+        celdaValor,
+        el('td', { text: fecha(r.answered_at) }),
+        el('td', { text: String(r.intentos ?? 1) }),
+        celdaHist));
     }
-    html += '</div>';
+    tabla.appendChild(tb);
+    modal.appendChild(el('div', { class: 'tabla-wrap' }, tabla));
+
+    if (d.analisis && d.analisis.length) {
+      modal.appendChild(el('h3', { style: 'margin:20px 0 10px;font-size:15px', text: 'Análisis generado' }));
+      for (const a of d.analisis) {
+        modal.appendChild(el('div', { class: 'pieza-analisis' },
+          el('h3', { text: `${a.tipo} · ${fecha(a.generado_at)} · ${a.modelo}` }),
+          el('div', { class: 'cuerpo', text: a.contenido })));
+      }
+    }
+
+    modal.appendChild(el('div', { class: 'acciones' },
+      el('button', { class: 'btn btn-primario', onclick: () => descargar(sessionId), text: 'Descargar Excel' }),
+      el('div', { class: 'espaciador' }),
+      el('button', { class: 'btn', onclick: () => fondo.remove(), text: 'Cerrar' })));
+  } catch (ex) {
+    modal.innerHTML = '';
+    modal.appendChild(el('div', { class: 'aviso aviso-error', text: ex.message }));
+    modal.appendChild(el('button', { class: 'btn', onclick: () => fondo.remove(), text: 'Cerrar' }));
   }
-  document.getElementById('modalFormView').innerHTML = html;
 }
 
-function renderModalChat(messages) {
-  if (!messages || !messages.length) {
-    document.getElementById('modalChatView').innerHTML = `<div class="empty">No hay mensajes registrados.</div>`;
+async function descargar(sessionId) {
+  try {
+    const r = await fetch('/api/excel/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${TOKEN}` },
+      body: JSON.stringify({ session_id: sessionId }),
+    });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const url = URL.createObjectURL(await r.blob());
+    const a = el('a', { href: url, download: `consolidacion_${sessionId.slice(0, 8)}.xlsx` });
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+  } catch (ex) { aviso('No se pudo generar el Excel: ' + ex.message); }
+}
+
+// ── Tablas genéricas ────────────────────────────────────────────────────
+async function descargarDeUsuario(userId, nombre) {
+  try {
+    const r = await fetch('/api/excel/lote', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${TOKEN}` },
+      body: JSON.stringify({ user_id: userId }),
+    });
+    if (r.status === 404) { aviso(`${nombre} todavía no tiene consolidaciones.`); return; }
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const url = URL.createObjectURL(await r.blob());
+    const a = el('a', { href: url, download: `consolidaciones_${(nombre || 'facilitador').replace(/\s+/g, '_')}.xlsx` });
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+  } catch (ex) { aviso('No se pudo generar el Excel: ' + ex.message); }
+}
+
+async function vistaTablaSimple(c, ruta, clave) {
+  const d = await api(ruta);
+  const filas = d[clave] || [];
+  c.innerHTML = '';
+  if (!filas.length) {
+    c.appendChild(el('p', { class: 'nodo-ayuda', text: 'Todavía no hay datos suficientes.' }));
     return;
   }
-  const html = messages.map(m => {
-    const role = m.role === 'user' ? 'user' : 'assistant';
-    const label = role === 'user' ? 'Facilitador' : 'IA';
-    const ts = m.created_at ? new Date(m.created_at).toLocaleString('es-CO') : '';
-    return `<div class="chat-msg ${role}">
-      <div class="chat-role ${role}">${label}${ts ? ` · ${ts}` : ''}</div>
-      ${esc(m.content)}
-    </div>`;
-  }).join('');
-  document.getElementById('modalChatView').innerHTML = `<div class="chat-log">${html}</div>`;
+  const columnas = Object.keys(filas[0]).filter(k => k !== 'user_id');
+  const conDescarga = 'user_id' in filas[0];
+  const tabla = el('table', { class: 'tabla-resumen' });
+  tabla.appendChild(el('thead', {}, el('tr', {},
+    ...columnas.map(k => el('th', { text: k.replace(/_/g, ' ') })),
+    ...(conDescarga ? [el('th', { text: '' })] : []))));
+  const tb = el('tbody');
+  for (const f of filas) {
+    const fila = el('tr', {}, ...columnas.map(k =>
+      el('td', { text: f[k] === null || f[k] === undefined ? '—' : String(f[k]) })));
+    if (conDescarga) {
+      fila.appendChild(el('td', {}, el('button', {
+        class: 'btn',
+        onclick: () => descargarDeUsuario(f.user_id, f.nombre),
+        text: 'Excel',
+      })));
+    }
+    tb.appendChild(fila);
+  }
+  tabla.appendChild(tb);
+  c.appendChild(el('div', { class: 'tabla-wrap' }, tabla));
 }
 
-function switchModalTab(tab) {
-  _currentModalTab = tab;
-  document.getElementById('modalFormView').style.display = tab === 'form' ? '' : 'none';
-  document.getElementById('modalChatView').style.display = tab === 'chat' ? '' : 'none';
-  document.getElementById('mtab1').classList.toggle('active', tab === 'form');
-  document.getElementById('mtab2').classList.toggle('active', tab === 'chat');
-}
+// ── Cuentas ─────────────────────────────────────────────────────────────
+async function vistaCuentas(c) {
+  const d = await api('/api/auth/usuarios');
+  c.innerHTML = '';
 
-function closeModal(e) {
-  if (e.target === document.getElementById('modalBg')) {
-    document.getElementById('modalBg').style.display = 'none';
+  if (USUARIO.rol === 'admin') {
+    const form = el('form', { class: 'filtros', onsubmit: crear });
+    const campos = [
+      ['nuevoNombre', 'Nombre completo', 'text'],
+      ['nuevoEmail', 'Correo', 'email'],
+      ['nuevoPass', 'Contraseña temporal', 'text'],
+    ];
+    for (const [id, etiqueta, tipo] of campos) {
+      form.appendChild(el('div', { class: 'campo' },
+        el('label', { for: id, text: etiqueta }),
+        el('input', { type: tipo, id, required: true })));
+    }
+    const selRol = el('select', { id: 'nuevoRol' });
+    for (const r of ['facilitador', 'coordinador', 'admin']) selRol.appendChild(el('option', { value: r }, r));
+    form.appendChild(el('div', { class: 'campo' }, el('label', { for: 'nuevoRol', text: 'Rol' }), selRol));
+    const selProg = el('select', { id: 'nuevoPrograma' });
+    selProg.appendChild(el('option', { value: '' }, 'Sin programa'));
+    for (const p of ['Biblioteca_EPM','Programa_UVA','Museo_del_Agua','Parque_de_los_deseos']) selProg.appendChild(el('option', { value: p }, p));
+    form.appendChild(el('div', { class: 'campo' }, el('label', { for: 'nuevoPrograma', text: 'Programa' }), selProg));
+    form.appendChild(el('button', { class: 'btn btn-primario', type: 'submit', text: 'Crear cuenta' }));
+    c.appendChild(form);
+    c.appendChild(el('p', { class: 'nodo-ayuda',
+      text: 'La persona deberá cambiar la contraseña temporal en su primer ingreso. Comunícasela por un canal seguro, nunca por correo sin cifrar.' }));
+  }
+
+  const tabla = el('table', { class: 'tabla-resumen' });
+  tabla.appendChild(el('thead', {}, el('tr', {},
+    ...['Nombre','Correo','Rol','Cargo','Programa','Qué forma','Origen','Activa','Último acceso','']
+      .map(h => el('th', { text: h })))));
+  const tb = el('tbody');
+  for (const u of d.usuarios) {
+    const lineas = Array.isArray(u.lineas_accion) ? u.lineas_accion : [];
+    const queForma = el('td');
+    if (lineas.length) {
+      for (const l of lineas) {
+        queForma.appendChild(el('span', { class: 'etiqueta-bloque', text: l,
+                                          style: 'margin:0 4px 4px 0;display:inline-block' }));
+      }
+    }
+    if (u.temas) queForma.appendChild(el('div', { class: 'hist', text: u.temas }));
+    if (!lineas.length && !u.temas) queForma.textContent = '—';
+
+    tb.appendChild(el('tr', {},
+      el('td', { text: u.nombre }),
+      el('td', { text: u.email }),
+      el('td', {}, el('span', { class: 'etiqueta-bloque', text: u.rol })),
+      el('td', { text: u.cargo || '—' }),
+      el('td', { text: u.programa || '—' }),
+      queForma,
+      el('td', {}, el('span', {
+        class: u.auto_registrado ? 'marca-origen origen-sugerencia_ia' : '',
+        text: u.auto_registrado ? 'se registró' : 'creada por admin',
+      })),
+      el('td', { text: u.activo ? 'Sí' : 'No' }),
+      el('td', { text: fecha(u.ultimo_acceso) }),
+      el('td', {}, USUARIO.rol === 'admin' && u.id !== USUARIO.id
+        ? el('button', { class: 'btn', onclick: () => alternar(u), text: u.activo ? 'Desactivar' : 'Activar' })
+        : el('span', { text: '—' })),
+    ));
+  }
+  tabla.appendChild(tb);
+  c.appendChild(el('div', { class: 'tabla-wrap' }, tabla));
+
+  async function crear(e) {
+    e.preventDefault();
+    try {
+      await api('/api/auth/usuarios', { method: 'POST', body: {
+        nombre: $('#nuevoNombre').value.trim(),
+        email: $('#nuevoEmail').value.trim(),
+        password_temporal: $('#nuevoPass').value,
+        rol: $('#nuevoRol').value,
+        programa: $('#nuevoPrograma').value || null,
+      }});
+      aviso('Cuenta creada.', 'ok');
+      pintar();
+    } catch (ex) { aviso(ex.message); }
+  }
+
+  async function alternar(u) {
+    try {
+      await api(`/api/auth/usuarios/${u.id}/activo`, { method: 'PATCH', body: { activo: !u.activo } });
+      pintar();
+    } catch (ex) { aviso(ex.message); }
   }
 }
 
-function esc(str) {
-  return String(str || '')
-    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
-    .replace(/"/g,'&quot;');
-}
+// ── Arranque ────────────────────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', async () => {
+  if (!TOKEN) { $('#pantallaAcceso').classList.remove('oculto'); return; }
+  try { await iniciar(); } catch { salir(); }
+});
 </script>
 </body>
 </html>

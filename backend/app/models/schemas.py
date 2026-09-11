@@ -1,17 +1,17 @@
+
 from pydantic import BaseModel
-from typing import Optional
 
 
 class ChatMessage(BaseModel):
     message: str
     session_id: str
-    user_name: Optional[str] = None
+    user_name: str | None = None
 
 
 class ChatResponse(BaseModel):
     content: str
     session_id: str
-    step: Optional[int] = None
+    step: int | None = None
 
 
 class ExcelDownloadRequest(BaseModel):

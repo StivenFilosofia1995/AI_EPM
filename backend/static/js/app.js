@@ -1,651 +1,996 @@
-/* ─────────────────────────────────────────
+/* ─────────────────────────────────────────────
    EPM — Consolidación Metodológica
-   Frontend Application
-───────────────────────────────────────── */
+   Flujo de árbol de decisiones. Un nodo a la vez.
+
+   Sin framework y sin build. El flujo lo decide el backend: este archivo
+   solo pinta el nodo que le devuelve la API y envía la respuesta. No hay
+   lógica de ramificación aquí, a propósito: duplicarla sería garantizar
+   que el frontend y el motor se desincronicen.
+───────────────────────────────────────────── */
 
 'use strict';
 
-// ── Persistent user name ──────────────────────────────────────────────────
-const USER_NAME_KEY = 'epm_user_name';
-let USER_NAME = localStorage.getItem(USER_NAME_KEY) || '';
-
-// ── Persistent session ID (scoped per user) ────────────────────────────────
+const TOKEN_KEY   = 'epm_token';
 const SESSION_KEY = 'epm_session_id';
-let SESSION_ID = localStorage.getItem(SESSION_KEY);
-if (!SESSION_ID) {
-  SESSION_ID = generateUUID();
-  localStorage.setItem(SESSION_KEY, SESSION_ID);
-}
 
-let isStreaming  = false;
-let currentStep  = 0;
+let TOKEN     = localStorage.getItem(TOKEN_KEY) || '';
+let SESSION   = localStorage.getItem(SESSION_KEY) || '';
+let USUARIO   = null;
+let NODO      = null;
+let ENVIANDO  = false;
 
-// ── DOM refs ───────────────────────────────────────────────────────────────
-const chatEl       = document.getElementById('chat');
-const inputEl      = document.getElementById('input');
-const sendBtnEl    = document.getElementById('sendBtn');
-const statusDotEl  = document.getElementById('statusDot');
-const statusTxtEl  = document.getElementById('statusText');
-const downloadBtn  = document.getElementById('btnDownload');
-const sheetsBtn    = document.getElementById('btnSheets');
-const newBtn       = document.getElementById('btnNew');
-const resetBtn     = document.getElementById('btnReset');
-const logoutBtn    = document.getElementById('btnLogout');
-const emailBtn     = document.getElementById('btnEmail');
-const sidebar      = document.getElementById('sidebar');
-const menuBtn      = document.getElementById('menuBtn');
-const progressFill = document.getElementById('progressFill');
-const progressLbl  = document.getElementById('progressLabel');
-const memoryBadge  = document.getElementById('memoryBadge');
-const toastEl      = document.getElementById('toast');
-const userBadgeEl  = document.getElementById('userBadge');
-const userTextEl   = document.getElementById('userText');
+// Campos largos donde tiene sentido ofrecer una sugerencia asistida.
+const CAMPOS_SUGERIBLES = new Set([
+  'pregunta_problematizadora', 'metodologia', 'descripcion_sesion',
+  'publico_especifico', 'logros', 'retos', 'observaciones',
+  'cumplimiento_objetivos', 'acciones_mejora', 'recursos',
+]);
 
-// ── Overlay (mobile) ───────────────────────────────────────────────────────
-const overlay = document.createElement('div');
-overlay.className = 'overlay';
-document.body.appendChild(overlay);
-
-menuBtn.addEventListener('click', () => {
-  sidebar.classList.toggle('open');
-  // Only show overlay on mobile
-  if (window.innerWidth <= 900) {
-    overlay.classList.toggle('visible');
+// ── Utilidades ───────────────────────────────────────────────────────────
+const $  = (sel) => document.querySelector(sel);
+const el = (tag, attrs = {}, ...hijos) => {
+  const n = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === 'class') n.className = v;
+    else if (k === 'text') n.textContent = v;
+    else if (k.startsWith('on')) n.addEventListener(k.slice(2), v);
+    else if (v !== null && v !== undefined && v !== false) n.setAttribute(k, v);
   }
-});
-overlay.addEventListener('click', () => {
-  sidebar.classList.remove('open');
-  overlay.classList.remove('visible');
-});
-// Hide overlay when resizing to desktop
-window.addEventListener('resize', () => {
-  if (window.innerWidth > 900) {
-    overlay.classList.remove('visible');
+  for (const h of hijos) {
+    if (h == null) continue;
+    n.appendChild(typeof h === 'string' ? document.createTextNode(h) : h);
   }
-});
+  return n;
+};
 
-// ── Utilities ──────────────────────────────────────────────────────────────
-function generateUUID() {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
-    const r = (Math.random() * 16) | 0;
-    return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
-  });
+function mostrarAviso(texto, tipo = 'info') {
+  const caja = $('#avisos');
+  caja.innerHTML = '';
+  caja.appendChild(el('div', { class: `aviso aviso-${tipo}`, text: texto }));
+  if (tipo === 'ok') setTimeout(() => { caja.innerHTML = ''; }, 5000);
 }
 
-function getTime() {
-  return new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' });
-}
+function limpiarAvisos() { $('#avisos').innerHTML = ''; }
 
-// ── Toast ─────────────────────────────────────────────────────────────────
-let toastTimer = null;
-function showToast(msg, type = '') {
-  toastEl.textContent = msg;
-  toastEl.className   = `toast show ${type}`;
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { toastEl.className = 'toast'; }, 3800);
-}
+// ── Cliente de API ───────────────────────────────────────────────────────
+async function api(ruta, opciones = {}) {
+  const cfg = {
+    method: opciones.method || 'GET',
+    headers: { 'Content-Type': 'application/json', ...(opciones.headers || {}) },
+  };
+  if (TOKEN) cfg.headers['Authorization'] = `Bearer ${TOKEN}`;
+  if (opciones.body !== undefined) cfg.body = JSON.stringify(opciones.body);
 
-// ── Markdown renderer (XSS-safe) ──────────────────────────────────────────
-function renderMarkdown(raw) {
-  let txt = raw
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+  const r = await fetch(ruta, cfg);
 
-  txt = txt
-    .replace(/^(\*{3,}|-{3,})$/gm, '<hr>')
-    .replace(/^### (.+)$/gm,  '<h3>$1</h3>')
-    .replace(/^## (.+)$/gm,   '<h2>$1</h2>')
-    .replace(/^# (.+)$/gm,    '<h1>$1</h1>')
-    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    .replace(/\*(.+?)\*/g,      '<em>$1</em>')
-    .replace(/`([^`]+)`/g,     '<code>$1</code>')
-    .replace(/^[-*•] (.+)$/gm, '<li>$1</li>');
-
-  txt = txt.replace(/(<li>[\s\S]*?<\/li>\n?)+/g, m => `<ul>${m}</ul>`);
-  txt = txt.replace(/\n\n/g, '</p><p>').replace(/\n/g, '<br>');
-  return `<p>${txt}</p>`;
-}
-
-// ── User display ──────────────────────────────────────────────────────────
-function updateUserDisplay() {
-  if (!userTextEl || !USER_NAME) return;
-  userTextEl.textContent = USER_NAME;
-  userBadgeEl.classList.add('active');
-}
-
-// ── Status indicator ───────────────────────────────────────────────────────
-function setStatus(state, text) {
-  statusDotEl.className = 'status-dot ' + (state || '');
-  statusTxtEl.textContent = text;
-}
-
-async function checkHealth() {
-  try {
-    const r = await fetch('/api/health');
-    if (!r.ok) throw new Error('unhealthy');
-    const data = await r.json();
-    const engine = data.engine || 'desconocido';
-    setStatus('online', `${engine} · activo`);
-    memoryBadge.classList.add('active');
-    document.getElementById('memoryText').textContent = 'Memoria activa';
-  } catch {
-    setStatus('error', 'Sin conexión');
-  }
-}
-
-// ── Progress ───────────────────────────────────────────────────────────────
-let _finaleShown = false;
-
-function showFinaleActions() {
-  if (_finaleShown) return;
-  _finaleShown = true;
-
-  const bar = document.createElement('div');
-  bar.className = 'finale-actions';
-  bar.id = 'finaleBar';
-  bar.innerHTML = `
-    <div class="finale-title">🎉 ¡Consolidación completa! ¿Qué deseas hacer?</div>
-    <div class="finale-btns">
-      <button class="finale-btn finale-sheets" id="finaleSheets">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
-          stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-          <polyline points="14 2 14 8 20 8"/>
-          <line x1="16" y1="13" x2="8" y2="13"/>
-          <line x1="16" y1="17" x2="8" y2="17"/>
-          <polyline points="10 9 9 9 8 9"/>
-        </svg>
-        Guardar en Sheets
-      </button>
-      <button class="finale-btn finale-email" id="finaleEmail">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
-          stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
-          <polyline points="22,6 12,13 2,6"/>
-        </svg>
-        Enviar por correo
-      </button>
-    </div>`;
-  chatEl.appendChild(bar);
-  scrollToBottom();
-
-  bar.querySelector('#finaleSheets').addEventListener('click', submitToSheets);
-  bar.querySelector('#finaleEmail').addEventListener('click', showEmailModal);
-}
-function advanceStep(n) {
-  if (n <= 0 || n > 25) return;
-  currentStep = n;
-
-  const pct = Math.round((n / 25) * 100);
-  progressFill.style.width = pct + '%';
-  progressLbl.textContent  = `${n} / 25`;
-
-  document.querySelectorAll('.step-item').forEach(el => {
-    const s = parseInt(el.dataset.step, 10);
-    el.classList.remove('done', 'active');
-    if (s < n)  el.classList.add('done');
-    if (s === n) {
-      el.classList.add('active');
-      el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-    }
-  });
-}
-
-function detectStep(text) {
-  const m = text.match(/[Pp]regunta\s+\*{0,2}(\d+)\*{0,2}\s+de\s+25/);
-  if (m) {
-    const step = parseInt(m[1], 10);
-    if (step > currentStep) advanceStep(step);
-  }
-  // Detect completion: step 25 done, or bot summarises all fields
-  const done = currentStep >= 25 ||
-    /todos los campos.*complet|consolidaci[oó]n.*complet|25\s*\/\s*25 campos/i.test(text);
-  if (done) showFinaleActions();
-}
-
-// ── Messages ───────────────────────────────────────────────────────────────
-function appendMessage(role, content, streaming = false) {
-  const msgEl    = document.createElement('div');
-  msgEl.className = `message ${role}`;
-
-  const avatarEl = document.createElement('div');
-  avatarEl.className = 'avatar';
-  avatarEl.textContent = role === 'bot' ? 'IA' : 'TÚ';
-
-  const bubbleEl = document.createElement('div');
-  bubbleEl.className = 'bubble';
-  if (streaming) {
-    bubbleEl.id = 'streaming-bubble';
-  } else {
-    bubbleEl.innerHTML = renderMarkdown(content);
+  // Un 401 en el propio login son credenciales incorrectas, no una sesión
+  // expirada: cerrar sesión ahí ocultaba el mensaje real del servidor.
+  if (r.status === 401 && !ruta.startsWith('/api/auth/login')) {
+    cerrarSesion(true);
+    throw new Error('La sesión expiró. Ingresa de nuevo.');
   }
 
-  const tsEl = document.createElement('div');
-  tsEl.className   = 'timestamp';
-  tsEl.textContent = getTime();
-
-  const innerEl = document.createElement('div');
-  innerEl.className = 'msg-inner';
-  innerEl.appendChild(bubbleEl);
-  innerEl.appendChild(tsEl);
-
-  msgEl.appendChild(avatarEl);
-  msgEl.appendChild(innerEl);
-  chatEl.appendChild(msgEl);
-  scrollToBottom();
-  return bubbleEl;
-}
-
-function appendSystemNotice(html) {
-  const el = document.createElement('div');
-  el.className = 'system-notice';
-  el.innerHTML = html;
-  chatEl.appendChild(el);
-  scrollToBottom();
-}
-
-// ── Typing indicator ───────────────────────────────────────────────────────
-function showTyping() {
-  const wrap = document.createElement('div');
-  wrap.className = 'typing-wrap';
-  wrap.id = 'typing-indicator';
-
-  const avatarEl = document.createElement('div');
-  avatarEl.className = 'avatar';
-  avatarEl.textContent = 'IA';
-
-  const typingEl = document.createElement('div');
-  typingEl.className = 'typing';
-  typingEl.innerHTML = '<span></span><span></span><span></span>';
-
-  wrap.appendChild(avatarEl);
-  wrap.appendChild(typingEl);
-  chatEl.appendChild(wrap);
-  scrollToBottom();
-}
-
-function hideTyping() {
-  document.getElementById('typing-indicator')?.remove();
-}
-
-function scrollToBottom() {
-  chatEl.scrollTop = chatEl.scrollHeight;
-}
-
-// ── Loading state ──────────────────────────────────────────────────────────
-function setLoading(v) {
-  isStreaming        = v;
-  sendBtnEl.disabled = v;
-  inputEl.disabled   = v;
-}
-
-// ── SSE stream reader ──────────────────────────────────────────────────────
-async function readStream(reader, onChunk, onMeta, onDone) {
-  const decoder = new TextDecoder();
-  let   buffer  = '';
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split('\n');
-    buffer = lines.pop() ?? '';
-
-    for (const line of lines) {
-      if (!line.startsWith('data: ')) continue;
-      const data = line.slice(6).trim();
-      if (data === '[DONE]') { onDone(); return; }
-      if (!data) continue;
-      try {
-        const parsed = JSON.parse(data);
-        if (parsed.content) onChunk(parsed.content);
-        if (parsed.meta)    onMeta(parsed.meta);
-      } catch {
-        // Ignore malformed fragments
-      }
-    }
-  }
-  onDone();
-}
-
-// ── Send message ───────────────────────────────────────────────────────────
-async function sendMessage() {
-  const text = inputEl.value.trim();
-  if (!text || isStreaming) return;
-
-  inputEl.value = '';
-  autoResize();
-
-  appendMessage('user', text);
-  setLoading(true);
-  showTyping();
-
-  try {
-    const response = await fetch('/api/chat', {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ message: text, session_id: SESSION_ID, user_name: USER_NAME }),
-    });
-
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-
-    hideTyping();
-    const bubbleEl = appendMessage('bot', '', true);
-    let   fullText = '';
-
-    await readStream(
-      response.body.getReader(),
-      chunk => {
-        fullText += chunk;
-        bubbleEl.innerHTML = renderMarkdown(fullText);
-        scrollToBottom();
-      },
-      meta => {
-        if (meta === 'history_restored') {
-          appendSystemNotice(
-            '🔄 <strong>Sesión restaurada</strong> — se recuperó el historial de conversación desde Supabase.'
-          );
-        }
-      },
-      () => {
-        bubbleEl.removeAttribute('id');
-        detectStep(fullText);
-      },
-    );
-  } catch (err) {
-    hideTyping();
-    appendMessage('bot', `**Error de conexión:** ${err.message}. Por favor intenta de nuevo.`);
-  } finally {
-    setLoading(false);
-    inputEl.focus();
-  }
-}
-
-// ── Excel download ─────────────────────────────────────────────────────────
-async function downloadExcel() {
-  downloadBtn.disabled = true;
-  downloadBtn.textContent = 'Generando…';
-  try {
-    const r = await fetch('/api/excel/generate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ session_id: SESSION_ID }),
-    });
+  if (opciones.raw) {
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
-
-    const blob = await r.blob();
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement('a');
-    a.href     = url;
-    a.download = 'consolidacion_metodologica_epm.xlsx';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    showToast('Excel descargado correctamente', 'success');
-  } catch (err) {
-    showToast('Error al generar Excel: ' + err.message, 'error');
-  } finally {
-    downloadBtn.innerHTML = `
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
-        fill="none" stroke="currentColor" stroke-width="2"
-        stroke-linecap="round" stroke-linejoin="round">
-        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-        <polyline points="7 10 12 15 17 10"/>
-        <line x1="12" y1="15" x2="12" y2="3"/>
-      </svg>
-      Descargar Excel`;
-    downloadBtn.disabled = false;
+    return r;
   }
+
+  let datos = null;
+  try { datos = await r.json(); } catch { datos = null; }
+
+  if (!r.ok) {
+    const err = new Error(mensajeDeError(datos, r.status));
+    err.status = r.status;
+    err.detalle = datos && datos.detail;
+    // Lista estructurada {field_key, code, message}: permite señalar el
+    // campo exacto en vez de mostrar un mensaje suelto al final del formulario.
+    err.errores = (datos && datos.errors)
+      || (datos && datos.detail && datos.detail.errors)
+      || null;
+    throw err;
+  }
+  return datos;
 }
 
-// ── Google Sheets submit ───────────────────────────────────────────────────
-async function submitToSheets() {
-  sheetsBtn.disabled = true;
-  sheetsBtn.textContent = 'Guardando…';
+function mensajeDeError(datos, status) {
+  if (!datos) return `Error ${status}.`;
+  const d = datos.detail;
+  if (typeof d === 'string') return d;
+  if (d && Array.isArray(d.errors)) return d.errors.map(e => e.message).join(' ');
+  if (Array.isArray(d) && d.length && d[0].msg) return d[0].msg;
+  return `Error ${status}.`;
+}
+
+// ── Acceso ───────────────────────────────────────────────────────────────
+$('#formAcceso').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn = $('#btnAcceder');
+  const err = $('#errorAcceso');
+  err.classList.add('oculto');
+  btn.disabled = true;
+  btn.textContent = 'Verificando…';
+
   try {
-    const r = await fetch('/api/sheets/submit', {
+    const datos = await api('/api/auth/login', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ session_id: SESSION_ID }),
+      body: { email: $('#email').value.trim(), password: $('#password').value },
     });
-    const data = await r.json();
-    if (!r.ok) throw new Error(data.detail || `HTTP ${r.status}`);
+    TOKEN = datos.access_token;
+    localStorage.setItem(TOKEN_KEY, TOKEN);
+    USUARIO = datos.user;
 
-    showToast('✓ Guardado en Google Sheets', 'success');
-    _lastSheetsUrl = data.sheets_url || '';
-    _lastSheetsRow = data.sheets_row || 0;
-    appendSystemNotice(
-      `✅ <strong>Datos guardados en Google Sheets</strong> — fila ${data.sheets_row}. ` +
-      `<a href="${data.sheets_url}" target="_blank" rel="noopener noreferrer">Abrir hoja →</a>`
-    );
-  } catch (err) {
-    showToast('Error al guardar en Sheets: ' + err.message, 'error');
-  } finally {
-    sheetsBtn.innerHTML = `
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
-        fill="none" stroke="currentColor" stroke-width="2"
-        stroke-linecap="round" stroke-linejoin="round">
-        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-        <polyline points="14 2 14 8 20 8"/>
-        <line x1="16" y1="13" x2="8" y2="13"/>
-        <line x1="16" y1="17" x2="8" y2="17"/>
-        <polyline points="10 9 9 9 8 9"/>
-      </svg>
-      Guardar en Sheets`;
-    sheetsBtn.disabled = false;
-  }
-}
-
-// ── New session ────────────────────────────────────────────────────────────
-async function newSession() {
-  if (!confirm('¿Iniciar una nueva actividad? La sesión anterior quedará guardada en Supabase.')) return;
-
-  try {
-    const r = await fetch('/api/session/new', {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ user_name: USER_NAME }),
-    });
-    if (r.ok) {
-      const data = await r.json();
-      SESSION_ID = data.session_id;
-    } else {
-      SESSION_ID = generateUUID();
-    }
-  } catch {
-    SESSION_ID = generateUUID();
-  }
-
-  localStorage.setItem(SESSION_KEY, SESSION_ID);
-  chatEl.innerHTML = '';
-  currentStep  = 0;
-  _finaleShown = false;
-  progressFill.style.width = '0%';
-  progressLbl.textContent  = '0 / 25';
-  document.querySelectorAll('.step-item').forEach(el => el.classList.remove('done', 'active'));
-  showToast('Nueva actividad iniciada', 'success');
-  setTimeout(() => bootWelcome(), 200);
-}
-
-// ── Logout / switch user ──────────────────────────────────────────────────
-function logoutUser() {
-  if (!confirm(`¿Cerrar sesión de "${USER_NAME || 'este usuario'}"?\nPodrás iniciar sesión con otro nombre.`)) return;
-  localStorage.removeItem(SESSION_KEY);
-  localStorage.removeItem(USER_NAME_KEY);
-  location.reload();
-}
-
-// ── Email modal ────────────────────────────────────────────────────────────
-// State carried from the last successful sheets submit:
-let _lastSheetsUrl = '';
-let _lastSheetsRow = 0;
-
-function showEmailModal() {
-  const backdrop = document.createElement('div');
-  backdrop.className = 'email-modal-backdrop';
-  const prefill = USER_NAME ? '' : '';
-  backdrop.innerHTML = `
-    <div class="email-modal">
-      <div class="epm-modal-logo">epm</div>
-      <h2>Enviar resumen por correo</h2>
-      <p>Se enviará un correo HTML con todos los campos consolidados de esta actividad.</p>
-      <input type="email" id="emailInput"
-             placeholder="correo@ejemplo.com"
-             value="${prefill}" autocomplete="email" maxlength="120" />
-      <div class="modal-actions">
-        <button class="modal-cancel" id="emailCancel">Cancelar</button>
-        <button class="modal-send"   id="emailSend">Enviar ✉</button>
-      </div>
-    </div>`;
-  document.body.appendChild(backdrop);
-
-  const inputEl2 = backdrop.querySelector('#emailInput');
-  const sendEl   = backdrop.querySelector('#emailSend');
-  const cancelEl = backdrop.querySelector('#emailCancel');
-  inputEl2.focus();
-
-  cancelEl.addEventListener('click', () => backdrop.remove());
-  backdrop.addEventListener('click', e => { if (e.target === backdrop) backdrop.remove(); });
-
-  async function doSend() {
-    const email = inputEl2.value.trim();
-    if (!email || !email.includes('@')) {
-      inputEl2.focus();
-      inputEl2.style.borderColor = '#ef4444';
+    if (datos.debe_cambiar_password) {
+      $('#pantallaAcceso').classList.add('oculto');
+      $('#pantallaCambio').classList.remove('oculto');
+      $('#passActual').focus();
       return;
     }
-    sendEl.disabled = true;
-    sendEl.textContent = 'Enviando…';
-    try {
-      const r = await fetch('/api/email/send', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          session_id: SESSION_ID,
-          to_email:   email,
-          facilitador: USER_NAME || '',
-          sheets_url:  _lastSheetsUrl,
-          sheets_row:  _lastSheetsRow,
-        }),
-      });
-      const data = await r.json();
-      if (!r.ok) throw new Error(data.detail || `HTTP ${r.status}`);
-      backdrop.remove();
-      showToast(`✓ Correo enviado a ${email}`, 'success');
-    } catch (err) {
-      showToast('Error al enviar: ' + err.message, 'error');
-      sendEl.disabled = false;
-      sendEl.textContent = 'Enviar ✉';
-    }
-  }
-
-  sendEl.addEventListener('click', doSend);
-  inputEl2.addEventListener('keydown', e => { if (e.key === 'Enter') doSend(); });
-}
-
-// ── Textarea auto-resize ───────────────────────────────────────────────────
-function autoResize() {
-  inputEl.style.height = 'auto';
-  inputEl.style.height = Math.min(inputEl.scrollHeight, 128) + 'px';
-}
-
-// ── Events ────────────────────────────────────────────────────────────────
-inputEl.addEventListener('input', autoResize);
-
-inputEl.addEventListener('keydown', e => {
-  if (e.key === 'Enter' && !e.shiftKey) {
-    e.preventDefault();
-    sendMessage();
+    await iniciarApp();
+  } catch (ex) {
+    err.textContent = ex.message;
+    err.classList.remove('oculto');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Ingresar';
   }
 });
 
-sendBtnEl.addEventListener('click',  sendMessage);
-downloadBtn.addEventListener('click', downloadExcel);
-sheetsBtn.addEventListener('click',   submitToSheets);
-newBtn.addEventListener('click',      newSession);
-resetBtn?.addEventListener('click',   newSession);
-logoutBtn?.addEventListener('click',  logoutUser);
-emailBtn.addEventListener('click',    showEmailModal);
+$('#formCambio').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const err = $('#errorCambio');
+  err.classList.add('oculto');
 
-// ── Name modal ─────────────────────────────────────────────────────────────
-function showNameModal() {
-  return new Promise(resolve => {
-    const backdrop = document.createElement('div');
-    backdrop.className = 'name-modal-backdrop';
-    backdrop.innerHTML = `
-      <div class="name-modal">
-        <div class="epm-modal-logo">epm</div>
-        <h2>¡Bienvenido/a!</h2>
-        <p>Antes de comenzar, ¿cuál es tu nombre?<br>
-           <small style="color:var(--text-muted)">Se usará para personalizar tu sesión y memoria en Supabase.</small>
-        </p>
-        <input id="nameInput" type="text" placeholder="Tu nombre completo" autocomplete="name" maxlength="80" />
-        <button id="nameSubmit">Comenzar</button>
-      </div>`;
-    document.body.appendChild(backdrop);
+  const nueva = $('#passNueva').value;
+  if (nueva !== $('#passConfirma').value) {
+    err.textContent = 'Las contraseñas nuevas no coinciden.';
+    err.classList.remove('oculto');
+    return;
+  }
 
-    const input  = backdrop.querySelector('#nameInput');
-    const submit = backdrop.querySelector('#nameSubmit');
-    input.focus();
+  try {
+    await api('/api/auth/cambiar-password', {
+      method: 'POST',
+      body: { password_actual: $('#passActual').value, password_nueva: nueva },
+    });
+    $('#pantallaCambio').classList.add('oculto');
+    await iniciarApp();
+  } catch (ex) {
+    err.textContent = ex.message;
+    err.classList.remove('oculto');
+  }
+});
 
-    async function doSubmitName() {
-      const val = input.value.trim();
-      if (!val) { input.focus(); return; }
-      submit.disabled = true;
-      submit.textContent = 'Iniciando…';
-      try {
-        const r = await fetch('/api/session/new', {
-          method:  'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify({ user_name: val }),
-        });
-        if (r.ok) {
-          const data = await r.json();
-          SESSION_ID = data.session_id;
-          localStorage.setItem(SESSION_KEY, SESSION_ID);
-        }
-      } catch { /* keep existing SESSION_ID */ }
-      USER_NAME = val;
-      localStorage.setItem(USER_NAME_KEY, val);
-      updateUserDisplay();
-      backdrop.remove();
-      resolve(val);
+// ── Registro ─────────────────────────────────────────────────────────────
+let _opcionesRegistro = null;
+
+async function irARegistro() {
+  $('#pantallaAcceso').classList.add('oculto');
+  $('#pantallaRegistro').classList.remove('oculto');
+  $('#errorRegistro').classList.add('oculto');
+
+  if (!_opcionesRegistro) {
+    try {
+      _opcionesRegistro = await api('/api/auth/registro/opciones');
+    } catch {
+      _opcionesRegistro = { programas: [], lineas_accion: [] };
     }
-    submit.addEventListener('click', doSubmitName);
-    input.addEventListener('keydown', e => { if (e.key === 'Enter') doSubmitName(); });
+    pintarOpcionesRegistro();
+  }
+  $('#rNombre').focus();
+}
+
+function pintarOpcionesRegistro() {
+  const sel = $('#rPrograma');
+  sel.replaceChildren(el('option', { value: '' }, 'Sin programa asignado'));
+  for (const p of _opcionesRegistro.programas) {
+    sel.appendChild(el('option', { value: p }, p));
+  }
+
+  const caja = $('#rLineas');
+  caja.replaceChildren();
+  _opcionesRegistro.lineas_accion.forEach((linea, i) => {
+    const id = `rLinea_${i}`;
+    caja.appendChild(el('label', { class: 'opcion', for: id },
+      el('input', { type: 'checkbox', id, value: linea, name: 'rLinea' }),
+      el('span', { class: 'opcion-texto' }, el('b', { text: linea }))));
   });
 }
 
-// ── Boot ───────────────────────────────────────────────────────────────────
-function bootWelcome() {
-  const greeting = USER_NAME ? `**${USER_NAME}**` : '**facilitador/a**';
-  appendMessage('bot', [
-    `## ¡Hola, ${greeting}! Bienvenido/a al Asistente de Consolidación Metodológica`,
-    '',
-    'Soy el asistente IA de **Fundación Grupo EPM**. Te guiaré paso a paso para diligenciar el diseño metodológico de tu actividad.',
-    '',
-    '**Flujo de trabajo:**',
-    '- **Bloque 1** — Identificación y planeación metodológica (16 campos)',
-    '- **Bloque 2** — Informe de ejecución (4 campos)',
-    '- **Bloque 3** — Evaluación y análisis IA (5 campos)',
-    '',
-    'Tu historial queda guardado en **Supabase** y tus respuestas se escriben en **Google Sheets** al finalizar.',
-    '',
-    '---',
-    '¿Empezamos? **¿Cuál es el ID único de la actividad** que vas a registrar?',
-  ].join('\n'));
+function irAAcceso() {
+  $('#pantallaRegistro').classList.add('oculto');
+  $('#pantallaAcceso').classList.remove('oculto');
+  $('#errorAcceso').classList.add('oculto');
+  $('#email').focus();
 }
 
-window.addEventListener('DOMContentLoaded', async () => {
-  checkHealth();
-  if (!USER_NAME) {
-    await showNameModal();
-  } else {
-    updateUserDisplay();
+$('#btnIrRegistro').addEventListener('click', irARegistro);
+$('#btnIrAcceso').addEventListener('click', irAAcceso);
+
+// Relación entre el campo que reporta el backend y su control en pantalla.
+const CAMPOS_REGISTRO = {
+  nombre: 'rNombre', email: 'rEmail', password: 'rPass', cargo: 'rCargo',
+  programa: 'rPrograma', telefono: 'rTelefono', temas: 'rTemas',
+  lineas_accion: 'rLineas',
+};
+
+function limpiarErroresRegistro() {
+  for (const id of Object.values(CAMPOS_REGISTRO)) {
+    const control = document.getElementById(id);
+    if (!control) continue;
+    control.closest('.campo')?.classList.remove('con-error');
+    control.removeAttribute('aria-invalid');
   }
-  setTimeout(bootWelcome, 200);
+  document.querySelectorAll('#formRegistro .campo-error').forEach(n => n.remove());
+}
+
+function pintarErroresRegistro(errores) {
+  limpiarErroresRegistro();
+  const sueltos = [];
+  let primero = null;
+
+  for (const e of errores) {
+    const id = CAMPOS_REGISTRO[e.field_key];
+    const control = id && document.getElementById(id);
+    if (!control) { sueltos.push(e.message); continue; }
+
+    const campo = control.closest('.campo');
+    campo?.classList.add('con-error');
+    control.setAttribute('aria-invalid', 'true');
+    campo?.appendChild(el('div', { class: 'campo-error', text: e.message }));
+    if (!primero) primero = control;
+  }
+
+  if (primero) {
+    primero.focus();
+    primero.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }
+  return sueltos;
+}
+
+$('#formRegistro').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const err = $('#errorRegistro');
+  const btn = $('#btnRegistrar');
+  err.classList.add('oculto');
+  limpiarErroresRegistro();
+
+  const pass = $('#rPass').value;
+  if (pass !== $('#rPass2').value) {
+    const campo = $('#rPass2').closest('.campo');
+    campo.classList.add('con-error');
+    campo.appendChild(el('div', { class: 'campo-error',
+                                  text: 'Las contraseñas no coinciden.' }));
+    $('#rPass2').focus();
+    return;
+  }
+
+  const lineas = Array.from(document.querySelectorAll('input[name="rLinea"]:checked'))
+                      .map(i => i.value);
+
+  btn.disabled = true;
+  btn.textContent = 'Creando cuenta…';
+
+  try {
+    const datos = await api('/api/auth/registro', {
+      method: 'POST',
+      body: {
+        nombre: $('#rNombre').value.trim(),
+        email: $('#rEmail').value.trim(),
+        password: pass,
+        cargo: $('#rCargo').value.trim(),
+        programa: $('#rPrograma').value || null,
+        telefono: $('#rTelefono').value.trim() || null,
+        lineas_accion: lineas,
+        temas: $('#rTemas').value.trim() || null,
+      },
+    });
+    TOKEN = datos.access_token;
+    localStorage.setItem(TOKEN_KEY, TOKEN);
+    USUARIO = datos.user;
+    $('#pantallaRegistro').classList.add('oculto');
+    await iniciarApp();
+    mostrarAviso(`Cuenta creada. Bienvenido, ${USUARIO.nombre}.`, 'ok');
+  } catch (ex) {
+    const sueltos = Array.isArray(ex.errores) ? pintarErroresRegistro(ex.errores) : null;
+    // Solo se usa la caja general para lo que no pertenece a ningún campo.
+    if (sueltos === null || sueltos.length) {
+      err.textContent = sueltos && sueltos.length ? sueltos.join(' ') : ex.message;
+      err.classList.remove('oculto');
+    }
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Crear cuenta y entrar';
+  }
+});
+
+function cerrarSesion(expirada = false) {
+  localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(SESSION_KEY);
+  TOKEN = ''; SESSION = ''; USUARIO = null;
+  $('#app').classList.add('oculto');
+  $('#pantallaCambio').classList.add('oculto');
+  $('#pantallaRegistro').classList.add('oculto');
+  $('#pantallaAcceso').classList.remove('oculto');
+  if (expirada) {
+    const err = $('#errorAcceso');
+    err.textContent = 'La sesión expiró. Ingresa de nuevo.';
+    err.classList.remove('oculto');
+  }
+}
+
+$('#btnSalir').addEventListener('click', () => cerrarSesion());
+
+// ── Arranque ─────────────────────────────────────────────────────────────
+async function iniciarApp() {
+  if (!USUARIO) USUARIO = await api('/api/auth/me');
+
+  $('#usuarioNombre').textContent = USUARIO.nombre;
+  $('#usuarioEmail').textContent  = USUARIO.email;
+  $('#usuarioRol').textContent    = USUARIO.rol;
+
+  // Quien supervisa necesita poder llegar al panel sin escribir la URL.
+  const enlace = $('#enlaceAdmin');
+  if (['admin', 'coordinador'].includes(USUARIO.rol)) {
+    enlace.classList.remove('oculto');
+    enlace.style.display = 'block';
+  }
+
+  $('#pantallaAcceso').classList.add('oculto');
+  $('#pantallaRegistro').classList.add('oculto');
+  $('#app').classList.remove('oculto');
+
+  if (SESSION) {
+    try { await cargarNodoActual(); return; }
+    catch { localStorage.removeItem(SESSION_KEY); SESSION = ''; }
+  }
+  await verSesiones();
+}
+
+// ── Sesiones ─────────────────────────────────────────────────────────────
+$('#btnNueva').addEventListener('click', nuevaSesion);
+$('#btnMisSesiones').addEventListener('click', verSesiones);
+
+async function nuevaSesion() {
+  limpiarAvisos();
+  vista('vistaNodo');
+  conversacionCargando('Creando consolidación…');
+  try {
+    const datos = await api('/api/tree/session', { method: 'POST' });
+    SESSION = datos.session_id;
+    localStorage.setItem(SESSION_KEY, SESSION);
+    pintarNodo(datos);
+  } catch (ex) {
+    mostrarAviso(ex.message, 'error');
+  }
+}
+
+async function verSesiones() {
+  limpiarAvisos();
+  vista('vistaSesiones');
+  const cont = $('#vistaSesiones');
+  cont.innerHTML = '<div class="cargando">Cargando tus consolidaciones…</div>';
+
+  try {
+    const { sessions } = await api('/api/tree/sessions');
+    cont.innerHTML = '';
+    cont.appendChild(el('h2', { class: 'nodo-pregunta', text: 'Mis consolidaciones' }));
+
+    if (!sessions.length) {
+      cont.appendChild(el('p', {
+        class: 'nodo-ayuda',
+        text: 'Todavía no tienes consolidaciones. Empieza una nueva actividad.',
+      }));
+    } else {
+      const tabla = el('table', { class: 'tabla-resumen' });
+      tabla.appendChild(el('thead', {}, el('tr', {},
+        el('th', { text: 'Iniciada' }), el('th', { text: 'Estado' }),
+        el('th', { text: 'Última actividad' }), el('th', { text: '' }), el('th', { text: '' }))));
+      const tbody = el('tbody');
+      for (const s of sessions) {
+        tbody.appendChild(el('tr', {},
+          el('td', { text: fecha(s.created_at) }),
+          el('td', {}, el('span', { class: 'etiqueta-bloque', text: s.estado || '—' })),
+          el('td', { text: fecha(s.updated_at) }),
+          el('td', {}, el('button', {
+            class: 'btn',
+            onclick: () => { SESSION = s.session_id; localStorage.setItem(SESSION_KEY, SESSION); cargarNodoActual(); },
+            text: s.estado === 'completada' ? 'Ver' : 'Retomar',
+          })),
+          el('td', {}, el('button', {
+            class: 'btn',
+            onclick: () => descargarSesion(s.session_id),
+            text: 'Excel',
+          })),
+        ));
+      }
+      tabla.appendChild(tbody);
+      cont.appendChild(tabla);
+    }
+
+    cont.appendChild(el('div', { class: 'acciones' },
+      el('button', { class: 'btn btn-primario', onclick: nuevaSesion, text: 'Nueva actividad' }),
+      el('div', { class: 'espaciador' }),
+      sessions.length
+        ? el('button', { class: 'btn', onclick: descargarTodas,
+                         text: 'Descargar todas en Excel' })
+        : null));
+  } catch (ex) {
+    cont.innerHTML = '';
+    mostrarAviso(ex.message, 'error');
+  }
+}
+
+function fecha(iso) {
+  if (!iso) return '—';
+  try {
+    return new Date(iso).toLocaleString('es-CO',
+      { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  } catch { return iso; }
+}
+
+function vista(id) {
+  for (const v of ['vistaNodo', 'vistaResumen', 'vistaSesiones', 'vistaAnalisis']) {
+    $('#' + v).classList.toggle('oculto', v !== id);
+  }
+}
+
+// ── Nodo actual ──────────────────────────────────────────────────────────
+async function cargarNodoActual() {
+  vista('vistaNodo');
+  conversacionCargando('Cargando tu conversación…');
+  const datos = await api(`/api/tree/session/${SESSION}/current`);
+  pintarNodo(datos);
+}
+
+function pintarProgreso(progress) {
+  const cont = $('#progresoBloques');
+  cont.innerHTML = '';
+  for (const b of progress.por_bloque) {
+    if (!b.bloque) continue;
+    const pct = b.total ? Math.round(b.respondidos * 100 / b.total) : 0;
+    const completo = b.total > 0 && b.respondidos === b.total;
+    cont.appendChild(el('div', { class: `bloque-progreso ${completo ? 'completo' : 'activo'}` },
+      el('div', { class: 'titulo' },
+        el('b', { text: `Bloque ${b.bloque}` }),
+        el('span', { text: `${b.respondidos}/${b.total}` })),
+      el('div', { class: 'barra' }, el('i', { style: `width:${pct}%` })),
+    ));
+  }
+}
+
+// ── Conversación ─────────────────────────────────────────────────────────
+// El hilo se reconstruye SIEMPRE desde lo que devuelve el backend, nunca
+// desde memoria del navegador: al recargar, la conversación reaparece igual.
+
+function asegurarConversacion() {
+  // vistaNodo debe conservar #hilo y #dock: escribir innerHTML sobre la
+  // sección los destruía y el siguiente pintado fallaba con null.
+  const seccion = $('#vistaNodo');
+  if (!$('#hilo')) {
+    seccion.className = 'conversacion';
+    seccion.replaceChildren(
+      el('div', { class: 'hilo', id: 'hilo', 'aria-live': 'polite',
+                  'aria-label': 'Conversación' }),
+      el('div', { class: 'dock', id: 'dock' }));
+  }
+  return { hilo: $('#hilo'), dock: $('#dock') };
+}
+
+function conversacionCargando(texto) {
+  const { hilo, dock } = asegurarConversacion();
+  dock.replaceChildren();
+  hilo.replaceChildren(el('div', { class: 'cargando', text: texto }));
+}
+
+function burbuja(rol, contenido, ayuda) {
+  const texto = el('div', { class: 'texto' }, contenido);
+  if (ayuda) texto.appendChild(el('span', { class: 'ayuda', text: ayuda }));
+  return el('div', { class: `burbuja ${rol}` },
+    el('div', { class: 'avatar', text: rol === 'bot' ? 'EPM' : 'TÚ' }),
+    texto);
+}
+
+function pintarHilo(historial, nodo) {
+  const { hilo } = asegurarConversacion();
+  hilo.replaceChildren();
+
+  hilo.appendChild(burbuja('bot',
+    `Hola, ${USUARIO?.nombre?.split(' ')[0] || 'bienvenido'}. Vamos a consolidar tu actividad paso a paso. Puedes devolverte cuando quieras y todo se guarda solo.`));
+
+  let bloqueActual = null;
+  for (const paso of historial || []) {
+    if (paso.block && paso.block !== bloqueActual) {
+      bloqueActual = paso.block;
+      hilo.appendChild(el('div', { class: 'separador-bloque',
+        text: `Bloque ${paso.block} · ${paso.block_name}` }));
+    }
+    hilo.appendChild(burbuja('bot', paso.label));
+    if (paso.valor) hilo.appendChild(burbuja('persona', paso.valor));
+  }
+
+  if (nodo.block && nodo.block !== bloqueActual) {
+    hilo.appendChild(el('div', { class: 'separador-bloque',
+      text: `Bloque ${nodo.block} · ${nodo.block_name}` }));
+  }
+
+  // Resumen de coherencia, si el nodo lo trae.
+  if (nodo.resumen && nodo.resumen.length) {
+    const caja = el('div', { class: 'resumen-caja' });
+    for (const r of nodo.resumen) {
+      const vacio = !r.valor;
+      caja.appendChild(el('div', { class: 'resumen-item' },
+        el('div', { class: 'clave', text: r.header }),
+        el('div', { class: `valor ${vacio ? 'vacio' : ''}`,
+                    text: vacio ? 'Sin diligenciar' : r.valor })));
+    }
+    hilo.appendChild(burbuja('bot', el('div', {}, el('div', { text: nodo.label }), caja), nodo.help));
+  } else {
+    hilo.appendChild(burbuja('bot', nodo.label, nodo.help));
+  }
+
+  hilo.scrollTop = hilo.scrollHeight;
+}
+
+function pintarNodo(datos) {
+  NODO = datos.node;
+  pintarProgreso(datos.progress);
+  vista('vistaNodo');
+  pintarHilo(datos.historial, NODO);
+  pintarDock(datos);
+}
+
+function pintarDock(datos) {
+  const { dock } = asegurarConversacion();
+  dock.replaceChildren();
+
+  if (NODO.terminal) {
+    dock.appendChild(el('div', { class: 'chips' },
+      el('button', { class: 'chip elegido', onclick: verResumen,
+                     text: 'Revisar los 25 campos' }),
+      el('button', { class: 'chip', onclick: retroceder, text: 'Volver atrás' })));
+    return;
+  }
+
+  // Selección única: una pulsación responde y avanza, como en un chat.
+  if (NODO.input_type === 'single_select') {
+    const chips = el('div', { class: 'chips' });
+    for (const o of NODO.options) {
+      const b = el('button', {
+        class: 'chip' + (NODO.previous_value === o.value ? ' elegido' : ''),
+        type: 'button',
+        onclick: () => enviarRespuesta(0, o.value),
+      }, el('span', {}, o.value));
+      if (o.help) b.appendChild(el('small', { text: o.help }));
+      chips.appendChild(b);
+    }
+    dock.appendChild(chips);
+    dock.appendChild(pieDock(datos));
+    return;
+  }
+
+  // Sugerencia de código, cuando el backend la calcula.
+  if (NODO.sugerencia) {
+    dock.appendChild(el('div', { class: 'sugerencia-codigo' },
+      el('span', { text: 'Te propongo:' }),
+      el('code', { text: NODO.sugerencia }),
+      el('button', { class: 'chip', type: 'button',
+        onclick: () => { const i = $('#entrada'); i.value = NODO.sugerencia; i.focus(); },
+        text: 'Usar este' }),
+      el('span', { class: 'nota-prov',
+        text: 'Código provisional generado por el sistema. Si la Fundación ya tiene una nomenclatura oficial, escríbela en su lugar.' })));
+  }
+
+  dock.appendChild(construirEntrada(NODO));
+
+  // Sugerencia asistida de redacción.
+  if (CAMPOS_SUGERIBLES.has(NODO.field_key) &&
+      ['text', 'textarea'].includes(NODO.input_type)) {
+    dock.appendChild(el('div', { class: 'sugerir-barra' },
+      el('button', { class: 'btn-sugerir', id: 'btnSugerir', type: 'button',
+                     onclick: pedirSugerencia, text: 'Ayúdame a redactarlo' }),
+      el('span', { class: 'sugerir-nota',
+                   text: 'Reformula lo que ya escribiste. Nunca lo rellena solo.' })));
+    dock.appendChild(el('div', { id: 'zonaSugerencias', class: 'sugerencias' }));
+  }
+
+  dock.appendChild(el('div', { id: 'errorCampo', role: 'alert', 'aria-live': 'assertive' }));
+  dock.appendChild(pieDock(datos, true));
+
+  const primero = dock.querySelector('input:not([type=checkbox]), textarea');
+  if (primero) primero.focus();
+}
+
+function pieDock(datos, conEnviar = false) {
+  const fila = el('div', { class: 'acciones' },
+    el('button', { class: 'btn', id: 'btnAtras', onclick: retroceder,
+                   disabled: !datos.can_go_back, text: 'Atrás' }));
+  if (conEnviar) {
+    fila.appendChild(el('button', { class: 'btn btn-primario', id: 'btnContinuar',
+                                    onclick: () => enviarRespuesta(), text: 'Responder' }));
+  }
+  fila.appendChild(el('div', { class: 'espaciador' }));
+  fila.appendChild(el('span', { class: 'guardado', id: 'indicadorGuardado',
+                                text: 'Guardado automático' }));
+  return fila;
+}
+
+function construirEntrada(nodo) {
+  const previo = nodo.previous_value;
+
+  if (nodo.input_type === 'multi_select') {
+    const previos = Array.isArray(previo) ? previo : [];
+    const caja = el('div', { class: 'opciones opciones-multi', role: 'group',
+                             'aria-label': nodo.label });
+    nodo.options.forEach((o, i) => {
+      const id = `op_${i}`;
+      caja.appendChild(el('label', { class: 'opcion', for: id },
+        el('input', { type: 'checkbox', name: 'respuesta', id, value: o.value,
+                      checked: previos.includes(o.value) }),
+        el('span', { class: 'opcion-texto' }, el('b', { text: o.value }))));
+    });
+    return caja;
+  }
+
+  if (nodo.input_type === 'textarea') {
+    const ta = el('textarea', { class: 'respuesta', id: 'entrada', rows: 4,
+                                'aria-label': nodo.label,
+                                placeholder: 'Escribe tu respuesta…' });
+    ta.value = previo || '';
+    const contador = el('div', { class: 'contador', id: 'contador' });
+    const actualizar = () => {
+      const n = ta.value.trim().length;
+      contador.textContent = `${n} caracteres`;
+      contador.classList.toggle('corto', n > 0 && n < 15);
+    };
+    ta.addEventListener('input', actualizar);
+    // Ctrl+Enter envía, como en cualquier chat.
+    ta.addEventListener('keydown', e => {
+      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); enviarRespuesta(); }
+    });
+    const envoltorio = el('div', { class: 'campo' }, ta, contador);
+    actualizar();
+    return envoltorio;
+  }
+
+  let inp;
+  if (nodo.input_type === 'date') {
+    inp = el('input', { type: 'date', class: 'respuesta', id: 'entrada',
+                        'aria-label': nodo.label });
+  } else if (nodo.input_type === 'integer' || nodo.input_type === 'percent') {
+    inp = el('input', { type: 'number', class: 'respuesta', id: 'entrada',
+                        inputmode: 'numeric', 'aria-label': nodo.label, min: 0,
+                        max: nodo.input_type === 'percent' ? 100 : null });
+  } else {
+    inp = el('input', { type: 'text', class: 'respuesta', id: 'entrada',
+                        'aria-label': nodo.label, autocomplete: 'off',
+                        placeholder: 'Escribe tu respuesta…' });
+  }
+  if (previo !== null && previo !== undefined) inp.value = previo;
+  inp.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); enviarRespuesta(); }
+  });
+
+  const envoltorio = el('div', { class: 'campo' }, inp);
+  if (nodo.autocomplete && nodo.autocomplete.length) {
+    const listaId = 'sugerencias_' + nodo.node_id;
+    inp.setAttribute('list', listaId);
+    const dl = el('datalist', { id: listaId });
+    for (const v of nodo.autocomplete) dl.appendChild(el('option', { value: v }));
+    envoltorio.appendChild(dl);
+  }
+  return envoltorio;
+}
+
+function leerValor() {
+  if (!NODO) return null;
+  if (NODO.input_type === 'multi_select') {
+    return Array.from(document.querySelectorAll('input[name="respuesta"]:checked'))
+                .map(i => i.value);
+  }
+  const inp = $('#entrada');
+  return inp ? inp.value : null;
+}
+
+function indicador(estado, texto) {
+  const n = $('#indicadorGuardado');
+  if (!n) return;
+  n.className = `guardado ${estado}`;
+  n.textContent = texto;
+}
+
+async function enviarRespuesta(reintento = 0, valorDirecto = undefined) {
+  if (ENVIANDO) return;
+  ENVIANDO = true;
+
+  const btn = $('#btnContinuar');
+  if (btn) btn.disabled = true;
+  const caja = $('#errorCampo');
+  if (caja) caja.innerHTML = '';
+  indicador('enviando', 'Guardando…');
+
+  const origen = window.__origenSugerencia || 'propio';
+  const valor = valorDirecto !== undefined ? valorDirecto : leerValor();
+
+  // La respuesta aparece de inmediato en el hilo; si el backend la
+  // rechaza, se repinta desde lo que él diga y la burbuja desaparece.
+  const textoPropio = Array.isArray(valor) ? valor.join('; ') : String(valor ?? '');
+  if (textoPropio.trim()) {
+    const hilo = $('#hilo');
+    hilo.appendChild(burbuja('persona', textoPropio));
+    hilo.appendChild(el('div', { class: 'burbuja bot', id: 'pensando' },
+      el('div', { class: 'avatar', text: 'EPM' }),
+      el('div', { class: 'escribiendo' }, el('span'), el('span'), el('span'))));
+    hilo.scrollTop = hilo.scrollHeight;
+  }
+
+  try {
+    const datos = await api(`/api/tree/session/${SESSION}/answer`, {
+      method: 'POST',
+      body: { node_id: NODO.node_id, value: valor, origen },
+    });
+    window.__origenSugerencia = null;
+    indicador('ok', 'Guardado');
+    limpiarAvisos();
+    pintarNodo(datos);
+  } catch (ex) {
+    document.getElementById('pensando')?.remove();
+    if (ex.status === 422 && ex.detalle && Array.isArray(ex.detalle.errors)) {
+      indicador('error', 'No guardado');
+      const hilo = $('#hilo');
+      // Se retira la burbuja optimista: esa respuesta no quedó guardada.
+      hilo.querySelectorAll('.burbuja.persona')[hilo.querySelectorAll('.burbuja.persona').length - 1]?.remove();
+      for (const e of ex.detalle.errors) {
+        hilo.appendChild(burbuja('bot', e.message));
+      }
+      hilo.scrollTop = hilo.scrollHeight;
+      const caja = $('#errorCampo');
+      if (caja) for (const e of ex.detalle.errors) {
+        caja.appendChild(el('div', { class: 'campo-error', text: e.message }));
+      }
+    } else if (!ex.status && reintento < 2) {
+      // Fallo de red: reintento con espera creciente.
+      indicador('enviando', `Sin conexión. Reintentando (${reintento + 1}/2)…`);
+      ENVIANDO = false;
+      if (btn) btn.disabled = false;
+      setTimeout(() => enviarRespuesta(reintento + 1, valorDirecto), 1500 * (reintento + 1));
+      return;
+    } else {
+      indicador('error', 'No guardado');
+      mostrarAviso(ex.message, 'error');
+    }
+  } finally {
+    ENVIANDO = false;
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function retroceder() {
+  try {
+    const datos = await api(`/api/tree/session/${SESSION}/back`, { method: 'POST' });
+    limpiarAvisos();
+    pintarNodo(datos);
+  } catch (ex) {
+    mostrarAviso(ex.message, 'error');
+  }
+}
+
+// ── Sugerencia asistida ──────────────────────────────────────────────────
+async function pedirSugerencia() {
+  const btn = $('#btnSugerir');
+  const zona = $('#zonaSugerencias');
+  const borrador = (leerValor() || '').toString().trim();
+
+  if (borrador.length < 10) {
+    zona.innerHTML = '';
+    zona.appendChild(el('div', { class: 'aviso aviso-info',
+      text: 'Escribe primero una idea, aunque sea breve. La sugerencia parte de lo que tú redactes; no inventa el contenido por ti.' }));
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Pensando…';
+  zona.innerHTML = '';
+
+  try {
+    const datos = await api('/api/ideas/sugerir', {
+      method: 'POST',
+      body: { session_id: SESSION, node_id: NODO.node_id, borrador },
+    });
+    if (!datos.sugerencias || !datos.sugerencias.length) {
+      zona.appendChild(el('div', { class: 'aviso aviso-info',
+        text: 'No se obtuvieron sugerencias. Tu texto se guarda igual.' }));
+      return;
+    }
+    for (const s of datos.sugerencias) {
+      zona.appendChild(el('div', { class: 'sugerencia' },
+        el('p', { text: s }),
+        el('button', {
+          class: 'btn', type: 'button',
+          onclick: () => aplicarSugerencia(s),
+          text: 'Usar esta redacción',
+        })));
+    }
+  } catch (ex) {
+    // La sugerencia nunca bloquea: el motor no la necesita para avanzar.
+    zona.appendChild(el('div', { class: 'aviso aviso-info',
+      text: `La sugerencia no está disponible ahora (${ex.message}). Puedes continuar normalmente.` }));
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Sugerir mejora';
+  }
+}
+
+function aplicarSugerencia(texto) {
+  const inp = $('#entrada');
+  if (!inp) return;
+  inp.value = texto;
+  inp.dispatchEvent(new Event('input'));
+  inp.focus();
+  window.__origenSugerencia = 'sugerencia_ia';
+  // Si el facilitador la edita después, queda registrado como editada.
+  inp.addEventListener('input', function marcar() {
+    window.__origenSugerencia = 'sugerencia_editada';
+    inp.removeEventListener('input', marcar);
+  });
+  $('#zonaSugerencias').innerHTML = '';
+}
+
+// ── Resumen ──────────────────────────────────────────────────────────────
+async function verResumen() {
+  vista('vistaResumen');
+  const cont = $('#vistaResumen');
+  cont.innerHTML = '<div class="cargando">Cargando resumen…</div>';
+
+  try {
+    const datos = await api(`/api/tree/session/${SESSION}/summary`);
+    cont.innerHTML = '';
+    cont.appendChild(el('h1', { class: 'nodo-pregunta', text: 'Resumen de la consolidación' }));
+    cont.appendChild(el('p', { class: 'nodo-ayuda',
+      text: 'Revisa los campos antes de finalizar. Los que aparecen atenuados no forman parte de la ruta de esta actividad.' }));
+
+    const tabla = el('table', { class: 'tabla-resumen' });
+    tabla.appendChild(el('thead', {}, el('tr', {},
+      el('th', { text: 'Bloque' }), el('th', { text: 'Campo' }), el('th', { text: 'Valor' }))));
+    const tbody = el('tbody');
+    for (const c of datos.campos) {
+      const vacio = !c.valor;
+      tbody.appendChild(el('tr', { class: c.alcanzable ? '' : 'no-alcanzable' },
+        el('td', {}, el('span', { class: 'etiqueta-bloque', text: c.block })),
+        el('td', { text: c.header }),
+        el('td', { class: 'campo-valor' },
+          el('span', { class: vacio ? 'valor vacio' : 'valor',
+                       text: vacio ? (c.alcanzable ? 'Sin diligenciar' : 'No aplica') : String(c.valor) })),
+      ));
+    }
+    tabla.appendChild(tbody);
+    cont.appendChild(tabla);
+
+    cont.appendChild(el('div', { class: 'acciones' },
+      el('button', { class: 'btn', onclick: cargarNodoActual, text: 'Seguir editando' }),
+      el('button', { class: 'btn btn-primario', onclick: finalizar, text: 'Finalizar consolidación' }),
+      el('div', { class: 'espaciador' }),
+      el('button', { class: 'btn', onclick: descargarExcel, text: 'Descargar Excel' }),
+    ));
+  } catch (ex) {
+    cont.innerHTML = '';
+    mostrarAviso(ex.message, 'error');
+  }
+}
+
+async function finalizar() {
+  try {
+    const datos = await api(`/api/tree/session/${SESSION}/finalize`, { method: 'POST' });
+    mostrarAviso(
+      datos.estado === 'planeada'
+        ? 'Diseño metodológico guardado. La actividad queda como planeada; retómala cuando la ejecutes.'
+        : `Consolidación finalizada con ${datos.campos_diligenciados} campos diligenciados.`,
+      'ok');
+    await verAnalisis();
+  } catch (ex) {
+    mostrarAviso(ex.message, 'error');
+  }
+}
+
+async function descargarArchivo(ruta, cuerpo, nombre) {
+  const r = await api(ruta, { method: 'POST', body: cuerpo, raw: true });
+  const blob = await r.blob();
+  const url = URL.createObjectURL(blob);
+  const a = el('a', { href: url, download: nombre });
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}
+
+async function descargarSesion(sessionId, etiqueta) {
+  try {
+    await descargarArchivo('/api/excel/generate', { session_id: sessionId },
+                           `consolidacion_epm_${etiqueta || sessionId.slice(0, 8)}.xlsx`);
+    mostrarAviso('Excel descargado.', 'ok');
+  } catch (ex) {
+    mostrarAviso(`No se pudo generar el Excel: ${ex.message}`, 'error');
+  }
+}
+
+async function descargarTodas() {
+  try {
+    await descargarArchivo('/api/excel/lote', {}, 'mis_consolidaciones_epm.xlsx');
+    mostrarAviso('Excel con todas tus consolidaciones descargado.', 'ok');
+  } catch (ex) {
+    mostrarAviso(ex.status === 404
+      ? 'Todavía no tienes consolidaciones para exportar.'
+      : `No se pudo generar el Excel: ${ex.message}`, 'error');
+  }
+}
+
+async function descargarExcel() {
+  try {
+    const r = await api('/api/excel/generate', {
+      method: 'POST', body: { session_id: SESSION }, raw: true,
+    });
+    const blob = await r.blob();
+    const url = URL.createObjectURL(blob);
+    const a = el('a', { href: url, download: 'consolidacion_epm.xlsx' });
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+    mostrarAviso('Excel descargado.', 'ok');
+  } catch (ex) {
+    mostrarAviso(`No se pudo generar el Excel: ${ex.message}`, 'error');
+  }
+}
+
+// ── Análisis ─────────────────────────────────────────────────────────────
+async function verAnalisis() {
+  vista('vistaAnalisis');
+  const cont = $('#vistaAnalisis');
+  cont.innerHTML = '<div class="cargando">Generando análisis…</div>';
+
+  try {
+    const datos = await api(`/api/ideas/analisis/${SESSION}`, { method: 'POST' });
+    cont.innerHTML = '';
+    cont.appendChild(el('h1', { class: 'nodo-pregunta', text: 'Análisis e ideas derivadas' }));
+
+    for (const [clave, titulo] of [
+      ['resumen', 'Resumen ejecutivo'],
+      ['analisis', 'Análisis metodológico'],
+      ['recomendaciones', 'Recomendaciones'],
+    ]) {
+      if (!datos[clave]) continue;
+      cont.appendChild(el('div', { class: 'pieza-analisis' },
+        el('h3', { text: titulo }),
+        el('div', { class: 'cuerpo', text: datos[clave] })));
+    }
+
+    if (datos.ideas && datos.ideas.length) {
+      const caja = el('div', { class: 'pieza-analisis' }, el('h3', { text: 'Ideas de actividades derivadas' }));
+      for (const idea of datos.ideas) {
+        const dl = el('dl');
+        dl.appendChild(el('dt', { text: 'Público' }));       dl.appendChild(el('dd', { text: idea.publico_sugerido || '—' }));
+        dl.appendChild(el('dt', { text: 'Tipo' }));          dl.appendChild(el('dd', { text: idea.tipo_actividad || '—' }));
+        dl.appendChild(el('dt', { text: 'Pregunta' }));      dl.appendChild(el('dd', { text: idea.pregunta_problematizadora || '—' }));
+        dl.appendChild(el('dt', { text: 'ODS' }));           dl.appendChild(el('dd', { text: (idea.ods || []).join('; ') || '—' }));
+        caja.appendChild(el('div', { class: 'idea' }, el('h4', { text: idea.nombre || 'Idea' }), dl));
+      }
+      cont.appendChild(caja);
+    }
+
+    cont.appendChild(el('div', { class: 'acciones' },
+      el('button', { class: 'btn', onclick: verResumen, text: 'Volver al resumen' }),
+      el('button', { class: 'btn', onclick: verAnalisis, text: 'Regenerar análisis' }),
+      el('div', { class: 'espaciador' }),
+      el('button', { class: 'btn btn-primario', onclick: verSesiones, text: 'Mis consolidaciones' })));
+  } catch (ex) {
+    cont.innerHTML = '';
+    cont.appendChild(el('h1', { class: 'nodo-pregunta', text: 'Análisis e ideas derivadas' }));
+    cont.appendChild(el('div', { class: 'aviso aviso-info',
+      text: `La consolidación quedó guardada correctamente. El análisis no se pudo generar ahora (${ex.message}); puedes reintentarlo sin perder nada.` }));
+    cont.appendChild(el('div', { class: 'acciones' },
+      el('button', { class: 'btn', onclick: verAnalisis, text: 'Reintentar' }),
+      el('button', { class: 'btn', onclick: verResumen, text: 'Volver al resumen' })));
+  }
+}
+
+// ── Inicio ───────────────────────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', async () => {
+  if (!TOKEN) { $('#pantallaAcceso').classList.remove('oculto'); return; }
+  try { await iniciarApp(); }
+  catch { cerrarSesion(); }
 });

@@ -1,58 +1,64 @@
-from pydantic_settings import BaseSettings
-from typing import Optional
+
+from pathlib import Path
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Anclado al directorio backend/, no al directorio de trabajo. Con env_file=
+# ".env" a secas, arrancar uvicorn desde la raiz del repositorio ignoraba
+# el archivo en silencio y la aplicacion levantaba sin configuracion.
+_BACKEND = Path(__file__).resolve().parent.parent
 
 
 class Settings(BaseSettings):
-    # ── LLM ──────────────────────────────────────────────────────────────────
-    ANTHROPIC_API_KEY: Optional[str] = None
+    # ── LLM — solo se usa en la etapa final de análisis e ideas ───────────────
+    ANTHROPIC_API_KEY: str | None = None
     ANTHROPIC_MODEL: str = "claude-haiku-4-5-20251001"
-    ANTHROPIC_BASE_URL: Optional[str] = None
+    ANTHROPIC_BASE_URL: str | None = None
 
-    TEMPERATURE: float = 0.4
+    TEMPERATURE: float = 0.3
     MAX_TOKENS: int = 1500
-    MAX_HISTORY: int = 20
 
     # ── Supabase ──────────────────────────────────────────────────────────────
     SUPABASE_URL: str = ""
-    SUPABASE_ANON_KEY: str = ""
     SUPABASE_SERVICE_ROLE_KEY: str = ""
-    DATABASE_URL: Optional[str] = None
 
-    # Memoria conversacional
-    USE_SUPABASE_MEMORY: bool = True
-    MEMORY_WINDOW_MESSAGES: int = 100
-    SUMMARY_MAX_CHARS: int = 6000
+    # ── Cuenta inicial (solo modo demostración, sin Supabase) ─────────────────
+    # Si ADMIN_PASSWORD viene del entorno, la cuenta de administrador se crea
+    # con esa contraseña y queda fija entre despliegues. Si no, se genera una
+    # aleatoria y se anuncia en los registros de arranque.
+    # NUNCA se escribe una contraseña por defecto aquí: el repositorio es
+    # público y quedaría legible por cualquiera.
+    ADMIN_EMAIL: str | None = None
+    ADMIN_PASSWORD: str | None = None
 
-    # ── Google Sheets ─────────────────────────────────────────────────────────
-    GOOGLE_SHEETS_ID: str = ""
-    GOOGLE_SHEETS_GID: str = "0"
-    # Opción 1 — archivo local
-    SERVICE_ACCOUNT_FILE: str = "service_account.json"
-    # Opción 2 — JSON completo como string (Railway)
-    GOOGLE_CREDENTIALS_JSON: Optional[str] = None
-
-    # ── Google Drive ──────────────────────────────────────────────────────────
-    GOOGLE_DRIVE_FOLDER_ID: Optional[str] = None
-
-    # ── Email ─────────────────────────────────────────────────────────────────
-    SMTP_HOST: str = "smtp.gmail.com"
-    SMTP_PORT: int = 587
-    SMTP_USER: Optional[str] = None
-    SMTP_PASSWORD: Optional[str] = None
-
-    # ── Admin ─────────────────────────────────────────────────────────────────
-    ADMIN_PIN: str = "epm2024"
+    # ── Autenticación (JWT propio) ────────────────────────────────────────────
+    # SECRET_KEY firma los tokens de acceso. Cambiarla invalida toda sesión
+    # abierta. En producción debe venir del entorno, nunca del valor por defecto.
+    SECRET_KEY: str = "change-me-in-production"
+    JWT_ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 480
 
     # ── App ───────────────────────────────────────────────────────────────────
     APP_NAME: str = "EPM — Consolidación Metodológica"
-    SECRET_KEY: str = "change-me-in-production"
-    ENVIRONMENT: str = "development"
-    CORS_ORIGINS: str = "*"
     PORT: int = 8000
 
-    class Config:
-        env_file = ".env"
-        case_sensitive = True
+    # ── Legado — flujo conversacional en retiro ───────────────────────────────
+    # Solo alimentan /api/chat y /api/form/*, marcados como obsoletos.
+    # Se eliminan cuando esos endpoints se retiren.
+    USE_SUPABASE_MEMORY: bool = True
+    MEMORY_WINDOW_MESSAGES: int = 100
+    MAX_HISTORY: int = 20
+
+    # extra="ignore" evita que una variable sobrante en .env tumbe el arranque.
+    # Sin esto, copiar .env.example a .env con una variable de más provoca un
+    # ValidationError de Pydantic y la aplicación no levanta.
+    model_config = SettingsConfigDict(
+        # El segundo tiene prioridad: permite un .env junto al CWD que
+        # sobrescriba al del backend, útil en desarrollo.
+        env_file=(_BACKEND / ".env", ".env"),
+        case_sensitive=True,
+        extra="ignore",
+    )
 
 
 settings = Settings()

@@ -1,3 +1,12 @@
+"""
+Generación del Excel institucional.
+
+Las etiquetas y el orden ya NO se definen aquí. Se derivan de
+app.domain.fields, la fuente de verdad única. Antes este módulo mantenía su
+propia copia de los 25 campos y ya había divergido de FIELD_HEADERS en dos
+etiquetas ("Duración Total de la Sesión" y "% de Cumplimiento de Evaluación").
+"""
+
 import io
 from datetime import datetime
 
@@ -5,7 +14,9 @@ from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 
-# EPM brand colors (hex without #)
+from app.domain.fields import FIELDS as _CONTRACT_FIELDS
+
+# Colores institucionales EPM (hex sin #)
 _GREEN = "00A650"
 _BLUE = "0066B3"
 _DARK_BLUE = "003B71"
@@ -14,38 +25,10 @@ _GREEN_LIGHT = "E8F5E9"
 _BLUE_LIGHT = "E3F2FD"
 _PURPLE_LIGHT = "EDE7F6"
 
+# (etiqueta, clave) por bloque, derivado del contrato. Imposible desincronizar.
 _FIELDS = {
-    "block1": [
-        ("ID Actividad", "id_actividad"),
-        ("Programa / Proyecto", "programa"),
-        ("Línea de Acción", "linea_accion"),
-        ("Tipo de Actividad", "tipo_actividad"),
-        ("Nombre de la Actividad", "nombre"),
-        ("Público", "publico"),
-        ("Público Específico", "publico_especifico"),
-        ("Lugar", "lugar"),
-        ("Responsable", "responsable"),
-        ("Duración Total de la Sesión", "duracion"),
-        ("Pregunta Problematizadora", "pregunta_problematizadora"),
-        ("ODS", "ods"),
-        ("Metodología", "metodologia"),
-        ("Descripción de la Sesión", "descripcion_sesion"),
-        ("Recursos y/o Materiales", "recursos"),
-        ("Fecha", "fecha"),
-    ],
-    "block2": [
-        ("Logros", "logros"),
-        ("Retos / Dificultades", "retos"),
-        ("Observaciones a Destacar", "observaciones"),
-        ("Comentarios de Participantes", "comentarios"),
-    ],
-    "block3": [
-        ("Instrumento Evaluativo", "instrumento_evaluativo"),
-        ("# Participantes Evaluados", "participantes_evaluados"),
-        ("Cumplimiento de Objetivos", "cumplimiento_objetivos"),
-        ("Acciones de Mejora", "acciones_mejora"),
-        ("% de Cumplimiento de Evaluación", "porcentaje_cumplimiento"),
-    ],
+    f"block{b}": [(f.header, f.key) for f in _CONTRACT_FIELDS if f.block == b]
+    for b in (1, 2, 3)
 }
 
 
@@ -128,3 +111,55 @@ def generate_excel(form_data: dict) -> bytes:
     wb.save(output)
     output.seek(0)
     return output.getvalue()
+
+
+def generate_excel_lote(filas: list[dict]) -> bytes:
+    """
+    Un libro con una fila por consolidación, para seguimiento.
+
+    Las 25 columnas del contrato van primero y en su orden exacto, de la A a
+    la Y. Las columnas de seguimiento (facilitador, estado, fechas) van
+    después, para no desplazar el contrato: quien lea A..Y sigue encontrando
+    lo mismo que en la hoja institucional.
+    """
+    from app.domain.fields import FIELD_HEADERS, FIELD_KEYS
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "CONSOLIDADO"
+
+    extra = ["Facilitador", "Programa del facilitador", "Estado",
+             "Avance %", "Creada", "Finalizada"]
+    encabezados = list(FIELD_HEADERS) + extra
+
+    ws.append(encabezados)
+    for i in range(1, len(encabezados) + 1):
+        celda = ws.cell(row=1, column=i)
+        celda.font = Font(bold=True, color=_WHITE, size=10)
+        celda.fill = PatternFill("solid", fgColor=_DARK_BLUE if i > len(FIELD_KEYS) else _GREEN)
+        celda.alignment = Alignment(vertical="center", wrap_text=True)
+    ws.row_dimensions[1].height = 30
+    ws.freeze_panes = "A2"
+
+    for fila in filas:
+        valores = [("" if fila.get(k) is None else str(fila.get(k))) for k in FIELD_KEYS]
+        valores += [
+            fila.get("facilitador") or "",
+            fila.get("facilitador_programa") or "",
+            fila.get("estado") or "",
+            fila.get("porcentaje_avance") if fila.get("porcentaje_avance") is not None else "",
+            (fila.get("created_at") or "")[:10],
+            (fila.get("completed_at") or "")[:10],
+        ]
+        ws.append(valores)
+
+    for i in range(1, len(encabezados) + 1):
+        ws.column_dimensions[get_column_letter(i)].width = 26 if i <= len(FIELD_KEYS) else 18
+    for row in ws.iter_rows(min_row=2):
+        for celda in row:
+            celda.alignment = Alignment(wrap_text=True, vertical="top")
+
+    salida = io.BytesIO()
+    wb.save(salida)
+    salida.seek(0)
+    return salida.getvalue()

@@ -1,0 +1,700 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# Árbol de decisiones — Consolidación metodológica EPM
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# Definición declarativa del flujo de captura. El motor (tree_engine.py) la
+# ejecuta tal cual: no hay lógica de flujo en código imperativo, y el modelo
+# de lenguaje NO interviene en esta etapa.
+#
+# Reglas de mantenimiento:
+#   · node_id es estable y único. NUNCA se renombra. Si un nodo cambia de
+#     semántica, se crea uno nuevo y se sube la versión del árbol.
+#   · Toda respuesta guardada registra con qué versión fue capturada.
+#   · No puede haber nodos huérfanos ni ciclos: el validador del grafo se
+#     ejecuta al arrancar la aplicación y en las pruebas.
+#
+# Mecanismos:
+#   field_key  — el nodo escribe directamente uno de los 25 campos.
+#   compose    — varios nodos componen un mismo campo final, en orden.
+#                Los campos compuestos son: descripcion_sesion,
+#                publico_especifico y acciones_mejora.
+#   (sin field_key ni compose) — nodo de control o informativo. Se persiste
+#                para trazabilidad pero no llega a las 25 columnas.
+# ═══════════════════════════════════════════════════════════════════════════
+
+version: "1.1.0"
+nombre: "Consolidación metodológica EPM"
+root: q00_intencion
+
+nodes:
+
+  # ═════════════════════════════════════════════════════════════════════════
+  # RAMIFICACIÓN 1 — Bloque condicional por etapa
+  # Evita exportar un Excel con los bloques 2 y 3 vacíos.
+  # ═════════════════════════════════════════════════════════════════════════
+
+  - node_id: q00_intencion
+    kind: question
+    block: 1
+    order: 0
+    label: "¿Qué quieres hacer hoy?"
+    help: >-
+      Empecemos por ahí. Según lo que elijas, te acompaño por el recorrido
+      que corresponde y no te pregunto nada que no aplique.
+    input_type: single_select
+    required: true
+    options:
+      - value: "Planear una actividad que voy a realizar"
+        help: >-
+          Registramos el diseño metodológico. Cuando la ejecutes, retomas
+          esta misma consolidación para completar el resto.
+      - value: "Consolidar una actividad que ya realicé"
+        help: >-
+          Recorremos los tres bloques: diseño, informe de ejecución y
+          evaluación.
+    default_next: q02_programa
+    validations:
+      - type: in_options
+
+  # ═════════════════════════════════════════════════════════════════════════
+  # BLOQUE 1 — Identificación y diseño metodológico
+  # ═════════════════════════════════════════════════════════════════════════
+
+  - node_id: q02_programa
+    field_key: programa
+    block: 1
+    order: 2
+    label: "¿A qué programa o proyecto pertenece la actividad?"
+    input_type: single_select
+    required: true
+    options_from: programa
+    default_next: q03_linea_accion
+    validations:
+      - type: in_options
+
+  - node_id: q03_linea_accion
+    field_key: linea_accion
+    block: 1
+    order: 3
+    label: "¿Cuál es la línea de acción principal?"
+    input_type: single_select
+    required: true
+    options_from: linea_accion
+    default_next: q04_tipo_actividad
+    validations:
+      - type: in_options
+
+  # ═════════════════════════════════════════════════════════════════════════
+  # RAMIFICACIÓN 3 — tipo_actividad determina la estructura de la descripción
+  # ═════════════════════════════════════════════════════════════════════════
+
+  - node_id: q04_tipo_actividad
+    field_key: tipo_actividad
+    block: 1
+    order: 4
+    label: "¿Qué tipo de actividad vas a desarrollar?"
+    help: "Define el formato pedagógico y la estructura de la descripción."
+    input_type: single_select
+    required: true
+    options:
+      - value: "Actividad de sensibilización"
+        next: q05_nombre
+      - value: "Club"
+        next: q05_nombre
+      - value: "Curso"
+        next: q04a_num_sesiones
+      - value: "Itinerancia"
+        next: q04c_espacios_itinerancia
+      - value: "Semillero"
+        next: q04a_num_sesiones
+      - value: "Taller"
+        next: q05_nombre
+    default_next: q05_nombre
+    validations:
+      - type: in_options
+
+  - node_id: q04a_num_sesiones
+    compose:
+      target: descripcion_sesion
+      order: 10
+      prefix: "Número de sesiones: "
+    block: 1
+    order: 4
+    label: "¿De cuántas sesiones consta el proceso?"
+    help: "Los cursos y semilleros se desarrollan en varias sesiones."
+    input_type: integer
+    required: true
+    default_next: q04b_periodicidad
+    validations:
+      - type: min_value
+        value: 1
+      - type: max_value
+        value: 200
+
+  - node_id: q04b_periodicidad
+    compose:
+      target: descripcion_sesion
+      order: 20
+      prefix: "Periodicidad: "
+    block: 1
+    order: 4
+    label: "¿Con qué periodicidad se realizan las sesiones?"
+    input_type: single_select
+    required: true
+    options:
+      - value: "Diaria"
+      - value: "Semanal"
+      - value: "Quincenal"
+      - value: "Mensual"
+      - value: "Periodicidad variable"
+    default_next: q05_nombre
+    validations:
+      - type: in_options
+
+  - node_id: q04c_espacios_itinerancia
+    compose:
+      target: descripcion_sesion
+      order: 30
+      prefix: "Espacios recorridos: "
+    block: 1
+    order: 4
+    label: "¿Qué espacios recorre la itinerancia?"
+    help: "Enumera los lugares en el orden en que se visitan."
+    input_type: textarea
+    required: true
+    default_next: q05_nombre
+    validations:
+      - type: min_length
+        value: 5
+
+  - node_id: q05_nombre
+    field_key: nombre
+    block: 1
+    order: 5
+    label: "¿Cómo se llama la actividad?"
+    help: "Un nombre claro y fácil de reconocer después en la hoja consolidada."
+    input_type: text
+    required: true
+    default_next: q01_id_actividad
+    validations:
+      - type: min_length
+        value: 3
+
+  # El identificador va aquí, y no al principio, porque solo en este punto
+  # conocemos el programa y el nombre: con eso se puede proponer un código
+  # con sentido en vez de pedirlo en frío.
+  - node_id: q01_id_actividad
+    field_key: id_actividad
+    block: 1
+    order: 1
+    label: "¿Con qué código quieres identificar esta actividad?"
+    # TODO: no hay patrón institucional confirmado. La sugerencia que calcula
+    # el backend es PROVISIONAL y se marca como tal ante el usuario. Cuando la
+    # Fundación entregue el patrón real, reemplazar sugerir_id_actividad() y
+    # añadir la validación de formato aquí y el CHECK en la migración 006.
+    help: >-
+      Te propongo uno abajo. Puedes usarlo tal cual o escribir el código
+      institucional si ya lo tienes. Solo debe ser único.
+    input_type: text
+    required: true
+    suggest: id_actividad
+    default_next: q06_publico
+    validations:
+      - type: min_length
+        value: 3
+      - type: unique_id_actividad
+
+  # ═════════════════════════════════════════════════════════════════════════
+  # RAMIFICACIÓN 2 — publico condiciona publico_especifico
+  # ═════════════════════════════════════════════════════════════════════════
+
+  - node_id: q06_publico
+    field_key: publico
+    block: 1
+    order: 6
+    label: "¿Cuál es el público principal de la actividad?"
+    input_type: single_select
+    required: true
+    options:
+      - value: "Primera infancia"
+        next: q06a_acompanamiento_cuidadores
+      - value: "Niños"
+      - value: "Adolescentes"
+      - value: "Jóvenes"
+      - value: "Adultos"
+      - value: "Adultos mayores"
+    default_next: q07_publico_especifico
+    validations:
+      - type: in_options
+
+  - node_id: q06a_acompanamiento_cuidadores
+    compose:
+      target: publico_especifico
+      order: 20
+      prefix: "Acompañamiento de cuidadores: "
+    block: 1
+    order: 7
+    label: "¿La actividad contempla acompañamiento de cuidadores?"
+    help: >-
+      En primera infancia, la presencia de un adulto acompañante cambia el
+      diseño de la sesión.
+    input_type: single_select
+    required: true
+    options:
+      - value: "Sí, acompañamiento permanente durante toda la sesión"
+      - value: "Sí, acompañamiento en momentos puntuales"
+      - value: "No, la actividad se desarrolla solo con los participantes"
+    default_next: q07_publico_especifico
+    validations:
+      - type: in_options
+
+  - node_id: q07_publico_especifico
+    compose:
+      target: publico_especifico
+      order: 10
+    block: 1
+    order: 7
+    label: "¿Qué característica específica tiene el público participante?"
+    # El texto de ayuda se ajusta según el público elegido: lo resuelve el
+    # motor con help_by_answer, no una instrucción al modelo.
+    help: "Describe la particularidad del grupo con el que vas a trabajar."
+    help_by_answer:
+      node: q06_publico
+      variants:
+        "Primera infancia": "Por ejemplo: niñas y niños de 2 a 5 años de hogares comunitarios del sector."
+        "Niños": "Por ejemplo: estudiantes de básica primaria de instituciones oficiales cercanas."
+        "Adolescentes": "Por ejemplo: estudiantes de grado 10 y 11 en jornada contraria."
+        "Jóvenes": "Por ejemplo: jóvenes en proceso de formación técnica o en búsqueda de empleo."
+        "Adultos": "Por ejemplo: cuidadores, docentes o líderes comunitarios del territorio."
+        "Adultos mayores": "Por ejemplo: personas mayores con movilidad reducida o de centros de bienestar."
+    input_type: textarea
+    required: true
+    default_next: q08_lugar
+    validations:
+      - type: min_length
+        value: 5
+
+  - node_id: q08_lugar
+    field_key: lugar
+    block: 1
+    order: 8
+    label: "¿Dónde se realizará la actividad?"
+    # TODO: no hay catálogo institucional confirmado de espacios por programa.
+    # Se implementa como texto libre con autocompletado alimentado por los
+    # valores ya registrados en base de datos. Cuando EPM entregue el catálogo
+    # oficial, convertir este nodo a single_select con options_from: lugar.
+    help: "Indica el espacio institucional o el lugar externo donde se desarrolla."
+    input_type: text
+    required: true
+    autocomplete_from: lugar
+    default_next: q09_responsable
+    validations:
+      - type: min_length
+        value: 3
+
+  - node_id: q09_responsable
+    field_key: responsable
+    block: 1
+    order: 9
+    label: "¿Quién es el responsable principal de la actividad?"
+    input_type: text
+    required: true
+    default_next: q10_duracion
+    validations:
+      - type: min_length
+        value: 3
+
+  - node_id: q10_duracion
+    field_key: duracion
+    block: 1
+    order: 10
+    label: "¿Cuál es la duración total de la sesión?"
+    help: "Expresa la duración en horas o en minutos. Por ejemplo: 2 horas, 90 minutos."
+    input_type: duration
+    required: true
+    default_next: q11_pregunta_problematizadora
+    validations:
+      - type: duration_format
+
+  - node_id: q11_pregunta_problematizadora
+    field_key: pregunta_problematizadora
+    block: 1
+    order: 11
+    label: "¿Qué pregunta central quieres que los participantes reflexionen o resuelvan?"
+    help: "La pregunta debe despertar análisis, curiosidad o reflexión crítica."
+    input_type: textarea
+    required: true
+    default_next: q12_ods
+    validations:
+      - type: min_length
+        value: 10
+
+  - node_id: q12_ods
+    field_key: ods
+    block: 1
+    order: 12
+    label: "¿Qué Objetivos de Desarrollo Sostenible se relacionan con la actividad?"
+    help: "Puedes seleccionar uno o varios."
+    input_type: multi_select
+    required: true
+    options_from: ods
+    default_next: q13_metodologia
+    validations:
+      - type: in_options
+      - type: min_selected
+        value: 1
+
+  - node_id: q13_metodologia
+    field_key: metodologia
+    block: 1
+    order: 13
+    label: "¿Cómo se desarrollará metodológicamente la actividad?"
+    help: "Incluye dinámicas, formas de participación, interacción y enfoque pedagógico."
+    input_type: textarea
+    required: true
+    default_next: q14a_descripcion_apertura
+    validations:
+      - type: min_length
+        value: 20
+
+  # ═════════════════════════════════════════════════════════════════════════
+  # RAMIFICACIÓN 4 — descripcion_sesion guiada en tres momentos
+  # No se pide como un solo campo de texto largo. El campo final sigue
+  # siendo uno: los tres subnodos se concatenan con separadores legibles.
+  # ═════════════════════════════════════════════════════════════════════════
+
+  - node_id: q14a_descripcion_apertura
+    compose:
+      target: descripcion_sesion
+      order: 40
+      prefix: "Apertura: "
+    block: 1
+    order: 14
+    label: "Describe la apertura de la sesión."
+    help: "Cómo se recibe al grupo, cómo se presenta el tema y se activa el interés."
+    help_by_answer:
+      node: q04_tipo_actividad
+      variants:
+        "Actividad de sensibilización": "En una sensibilización basta una apertura breve: saludo, encuadre y la pregunta que abre la conversación."
+    input_type: textarea
+    required: true
+    default_next: q14b_descripcion_desarrollo
+    validations:
+      - type: min_length
+        value: 15
+
+  - node_id: q14b_descripcion_desarrollo
+    compose:
+      target: descripcion_sesion
+      order: 50
+      prefix: "Desarrollo: "
+    block: 1
+    order: 14
+    label: "Describe el desarrollo de la sesión."
+    help: "Las actividades centrales, en el orden en que ocurren."
+    help_by_answer:
+      node: q04_tipo_actividad
+      variants:
+        "Actividad de sensibilización": "Concentra el desarrollo en una o dos acciones concretas."
+    input_type: textarea
+    required: true
+    default_next: q14c_descripcion_cierre
+    validations:
+      - type: min_length
+        value: 20
+
+  - node_id: q14c_descripcion_cierre
+    compose:
+      target: descripcion_sesion
+      order: 60
+      prefix: "Cierre: "
+    block: 1
+    order: 14
+    label: "Describe el cierre de la sesión."
+    help: "Cómo se recogen los aprendizajes y cómo se despide al grupo."
+    help_by_answer:
+      node: q04_tipo_actividad
+      variants:
+        "Actividad de sensibilización": "Un cierre corto: qué se lleva el participante y hacia dónde puede continuar."
+    input_type: textarea
+    required: true
+    default_next: q15_recursos
+    validations:
+      - type: min_length
+        value: 10
+
+  - node_id: q15_recursos
+    field_key: recursos
+    block: 1
+    order: 15
+    label: "¿Qué recursos o materiales se necesitan?"
+    help: "Por ejemplo: computadores, cartillas, sonido, videobeam, materiales reciclables."
+    input_type: textarea
+    required: true
+    default_next: q16_fecha
+    validations:
+      - type: min_length
+        value: 3
+
+  - node_id: q16_fecha
+    field_key: fecha
+    block: 1
+    order: 16
+    label: "¿Cuál es la fecha de la actividad?"
+    input_type: date
+    required: true
+    default_next: n17_resumen_bloque1
+    validations:
+      - type: date_format
+
+  # ═════════════════════════════════════════════════════════════════════════
+  # RAMIFICACIÓN 7 — Coherencia pedagógica antes de cerrar el bloque 1
+  # ═════════════════════════════════════════════════════════════════════════
+
+  - node_id: n17_resumen_bloque1
+    kind: confirm
+    block: 1
+    order: 16
+    label: "Revisa la coherencia del diseño metodológico"
+    help: >-
+      Antes de continuar, confirma que la pregunta problematizadora, la
+      metodología y los ODS seleccionados son coherentes entre sí.
+    summary_fields:
+      - pregunta_problematizadora
+      - metodologia
+      - ods
+    input_type: single_select
+    required: true
+    options:
+      - value: "Sí, el diseño es coherente"
+      # revisit marca aristas de corrección: devuelven al nodo correspondiente
+      # sin perder el resto de las respuestas. Se excluyen de la detección de
+      # ciclos (el grafo hacia adelante sigue siendo acíclico) pero su destino
+      # sí se valida como existente.
+      - value: "Quiero corregir la pregunta problematizadora"
+        next: q11_pregunta_problematizadora
+        revisit: true
+      - value: "Quiero corregir la metodología"
+        next: q13_metodologia
+        revisit: true
+      - value: "Quiero corregir los ODS"
+        next: q12_ods
+        revisit: true
+    # Si el diseño se confirma, la etapa decide si termina aquí o sigue.
+    next_when:
+      - if: "q00_intencion == 'Planear una actividad que voy a realizar'"
+        goto: n18_fin_planeada
+    default_next: q19_logros
+    validations:
+      - type: in_options
+
+  - node_id: n18_fin_planeada
+    kind: info
+    terminal: true
+    block: 1
+    order: 16
+    label: "Diseño metodológico registrado"
+    help: >-
+      La actividad queda guardada en estado planeada. Cuando la ejecutes,
+      retoma esta consolidación para completar el informe de ejecución y la
+      evaluación.
+    input_type: text
+    required: false
+    persist: false
+
+  # ═════════════════════════════════════════════════════════════════════════
+  # BLOQUE 2 — Informe de ejecución
+  # ═════════════════════════════════════════════════════════════════════════
+
+  - node_id: q19_logros
+    field_key: logros
+    block: 2
+    order: 17
+    label: "¿Cuáles fueron los principales logros de la actividad?"
+    help: "Incluye aprendizajes, participación o impactos positivos observados."
+    input_type: textarea
+    required: true
+    default_next: q20_retos
+    validations:
+      - type: min_length
+        value: 15
+
+  - node_id: q20_retos
+    field_key: retos
+    block: 2
+    order: 18
+    label: "¿Qué retos o dificultades se presentaron?"
+    help: "Aspectos metodológicos, logísticos o de participación."
+    input_type: textarea
+    required: true
+    default_next: q21_observaciones
+    validations:
+      - type: min_length
+        value: 10
+
+  - node_id: q21_observaciones
+    field_key: observaciones
+    block: 2
+    order: 19
+    label: "¿Qué observaciones importantes deseas registrar?"
+    input_type: textarea
+    required: true
+    default_next: q22_comentarios
+    validations:
+      - type: min_length
+        value: 5
+
+  - node_id: q22_comentarios
+    field_key: comentarios
+    block: 2
+    order: 20
+    label: "¿Qué comentarios relevantes hicieron los participantes?"
+    help: "Si no se recogieron comentarios, indícalo explícitamente."
+    input_type: textarea
+    required: true
+    default_next: q23_instrumento_evaluativo
+    validations:
+      - type: min_length
+        value: 5
+
+  # ═════════════════════════════════════════════════════════════════════════
+  # BLOQUE 3 — Evaluación
+  # RAMIFICACIÓN 5 — el instrumento condiciona participantes_evaluados
+  # ═════════════════════════════════════════════════════════════════════════
+
+  - node_id: q23_instrumento_evaluativo
+    field_key: instrumento_evaluativo
+    block: 3
+    order: 21
+    label: "¿Qué instrumento usaste para evaluar la actividad?"
+    help: >-
+      Con observación directa, el número de participantes evaluados se toma
+      como estimado y se marca así en la exportación.
+    input_type: single_select
+    required: true
+    options:
+      - value: "Encuesta"
+      - value: "Rúbrica"
+      - value: "Formulario"
+      - value: "Observación directa"
+      - value: "Otro instrumento"
+    default_next: q23a_total_participantes
+    validations:
+      - type: in_options
+
+  - node_id: q23a_total_participantes
+    # Nodo de control: se persiste en epm_respuestas para poder validar
+    # participantes_evaluados, pero NO se exporta. El contrato de 25 columnas
+    # queda intacto.
+    # NOTA: la sección 4.2.5 del encargo pide validar participantes_evaluados
+    # contra el total de participantes, dato que no existe entre los 25 campos.
+    # Esta es la solución propuesta y aplicada. Pendiente de tu confirmación.
+    block: 3
+    order: 21
+    label: "¿Cuántas personas participaron en total en la actividad?"
+    help: "Sirve para validar el número de participantes evaluados. No se exporta."
+    input_type: integer
+    required: true
+    default_next: q24_participantes_evaluados
+    validations:
+      - type: min_value
+        value: 0
+      - type: max_value
+        value: 100000
+
+  - node_id: q24_participantes_evaluados
+    field_key: participantes_evaluados
+    block: 3
+    order: 22
+    label: "¿Cuántos participantes fueron evaluados?"
+    help_by_answer:
+      node: q23_instrumento_evaluativo
+      variants:
+        "Observación directa": "Con observación directa puede ser un estimado. Se marcará como estimado en la exportación."
+    input_type: integer
+    required: true
+    default_next: q25_cumplimiento_objetivos
+    validations:
+      - type: min_value
+        value: 0
+      - type: not_greater_than_node
+        node: q23a_total_participantes
+
+  - node_id: q25_cumplimiento_objetivos
+    field_key: cumplimiento_objetivos
+    block: 3
+    order: 23
+    label: "¿En qué nivel se cumplieron los objetivos? Describe las evidencias."
+    input_type: textarea
+    required: true
+    default_next: q26_acciones_mejora
+    validations:
+      - type: min_length
+        value: 15
+
+  - node_id: q26_acciones_mejora
+    compose:
+      target: acciones_mejora
+      order: 10
+    block: 3
+    order: 24
+    label: "¿Qué acciones de mejora propones para futuras actividades?"
+    input_type: textarea
+    required: true
+    default_next: q27_porcentaje_cumplimiento
+    validations:
+      - type: min_length
+        value: 10
+
+  # ═════════════════════════════════════════════════════════════════════════
+  # RAMIFICACIÓN 6 — cumplimiento inferior al 60% exige justificación
+  # ═════════════════════════════════════════════════════════════════════════
+
+  - node_id: q27_porcentaje_cumplimiento
+    field_key: porcentaje_cumplimiento
+    block: 3
+    order: 25
+    label: "¿Qué porcentaje de cumplimiento tuvo la evaluación?"
+    help: "Un número entero entre 0 y 100."
+    input_type: percent
+    required: true
+    next_when:
+      - if: "q27_porcentaje_cumplimiento < 60"
+        goto: q27a_justificacion_bajo_cumplimiento
+    default_next: n28_fin
+    validations:
+      - type: min_value
+        value: 0
+      - type: max_value
+        value: 100
+
+  - node_id: q27a_justificacion_bajo_cumplimiento
+    compose:
+      target: acciones_mejora
+      order: 20
+      prefix: "Justificación del cumplimiento inferior al 60%: "
+    block: 3
+    order: 25
+    label: "El cumplimiento fue inferior al 60%. ¿A qué se debió?"
+    help: >-
+      Esta justificación se anexa a las acciones de mejora. Es obligatoria
+      cuando el cumplimiento está por debajo del 60%.
+    input_type: textarea
+    required: true
+    default_next: n28_fin
+    validations:
+      - type: min_length
+        value: 20
+
+  - node_id: n28_fin
+    kind: info
+    terminal: true
+    block: 3
+    order: 25
+    label: "Consolidación completa"
+    help: >-
+      Revisa el resumen de los 25 campos antes de finalizar. Al finalizar se
+      genera el análisis y las ideas derivadas.
+    input_type: text
+    required: false
+    persist: false
