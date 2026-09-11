@@ -67,15 +67,30 @@ async def health():
     db = await _check_db()
     tree = _check_tree()
 
-    cuenta: dict = {"estado": "ok"}
-    if settings.ADMIN_PASSWORD:
-        problemas = auth_service.validar_fortaleza(settings.ADMIN_PASSWORD)
-        if problemas:
-            cuenta = {
-                "estado": "sin_crear",
-                "motivo": "ADMIN_PASSWORD no cumple los requisitos.",
-                "requisitos": problemas,
-            }
+    # Comprobar que la cuenta EXISTE, no solo que la contraseña sea aceptable:
+    # un chequeo que solo mira la fortaleza reporta "ok" aunque no haya cuenta.
+    cuenta: dict = {"estado": "no_configurada"}
+    if settings.ADMIN_EMAIL and db["estado"] == "ok":
+        correo = settings.ADMIN_EMAIL.strip().lower()
+        try:
+            usuario = await auth_service.get_user_by_email(correo)
+            if usuario is None:
+                cuenta = {
+                    "estado": "sin_crear",
+                    "correo": correo,
+                    "motivo": "La cuenta no existe en la base de datos.",
+                }
+            else:
+                cuenta = {
+                    "estado": "ok",
+                    "correo": correo,
+                    "rol": usuario.get("rol"),
+                    "activa": bool(usuario.get("activo", True)),
+                }
+                if usuario.get("rol") != "admin" or not usuario.get("activo", True):
+                    cuenta["estado"] = "revisar"
+        except Exception as exc:
+            cuenta = {"estado": "desconocido", "detalle": f"{type(exc).__name__}"}
 
     rol = rol_de_la_clave()
     clave = {
@@ -111,7 +126,7 @@ async def health():
         and tree["estado"] == "ok"
         and esquema["estado"] in ("ok", "desconocido")
         and clave["estado"] == "ok"
-        and cuenta["estado"] == "ok"
+        and cuenta["estado"] in ("ok", "no_configurada", "desconocido")
     )
 
     return {

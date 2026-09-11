@@ -152,13 +152,18 @@ async def create_user(
     perfil: dict | None = None,
     auto_registrado: bool = False,
     debe_cambiar_password: bool = True,
+    exigir_fortaleza: bool = True,
 ) -> dict:
     if rol not in ROLES:
         raise AuthError(f"Rol inválido: {rol}. Debe ser uno de {ROLES}.")
 
-    problemas = validar_fortaleza(password)
-    if problemas:
-        raise AuthError(" ".join(problemas))
+    # exigir_fortaleza=False solo lo usa el arranque con ADMIN_PASSWORD: quien
+    # controla las variables de entorno es el dueño del sistema, y bloquear ahí
+    # dejaba la aplicación sin ninguna cuenta con la que entrar.
+    if exigir_fortaleza:
+        problemas = validar_fortaleza(password)
+        if problemas:
+            raise AuthError(" ".join(problemas))
 
     normalizado = email.strip().lower()
     if await get_user_by_email(normalizado):
@@ -372,3 +377,36 @@ async def actualizar_perfil(user_id: str, perfil: dict) -> dict:
     )
     filas = result.data or []
     return filas[0] if filas else {}
+
+
+async def fijar_password(user_id: str, password: str) -> None:
+    """
+    Fija la contraseña sin validar su fortaleza.
+
+    Uso exclusivo del arranque, para sincronizar la cuenta de administración
+    con la variable ADMIN_PASSWORD. Para cambios iniciados por una persona
+    está change_password, que sí valida.
+    """
+    client = get_client()
+    await _run(
+        lambda: client.table(USERS)
+        .update({
+            "password_hash": hash_password(password),
+            "debe_cambiar_password": False,
+            "activo": True,
+            "intentos_fallidos": 0,
+            "bloqueado_hasta": None,
+        })
+        .eq("id", user_id)
+        .execute()
+    )
+
+
+async def set_rol(user_id: str, rol: str) -> None:
+    """Cambia el rol de una cuenta. Solo lo usan el arranque y el panel."""
+    if rol not in ROLES:
+        raise AuthError(f"Rol inválido: {rol}. Debe ser uno de {ROLES}.")
+    client = get_client()
+    await _run(
+        lambda: client.table(USERS).update({"rol": rol}).eq("id", user_id).execute()
+    )

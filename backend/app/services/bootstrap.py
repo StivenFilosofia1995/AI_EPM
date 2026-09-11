@@ -1,18 +1,18 @@
 """
-Preparación de la primera cuenta al arrancar.
+Preparación de la cuenta de administración al arrancar.
 
-Existe para que la aplicación sea usable sin configuración previa: en modo
-demostración crea una cuenta de administrador y anuncia sus credenciales en
-los registros de arranque.
+Regla de oro: **las variables de entorno mandan.** Si ADMIN_EMAIL y
+ADMIN_PASSWORD están definidas, esa cuenta existe con esa contraseña, punto.
+Quien controla el panel de despliegue es el dueño del sistema.
 
-Por qué la contraseña NO está escrita en el código: este repositorio es
-público. Una contraseña fija en el código sería legible por cualquiera y le
-daría acceso al panel de administración. En su lugar:
+La versión anterior solo creaba la cuenta cuando no existía y nunca
+sincronizaba la contraseña. El resultado era una trampa: cambiar
+ADMIN_PASSWORD en Railway no surtía ningún efecto, para siempre, y no había
+forma de recuperar el acceso sin entrar a la base de datos a mano.
 
-  1. Si ADMIN_PASSWORD está en el entorno, se usa esa. Es la vía recomendada
-     en Railway: Variables → New Variable, y queda fija entre despliegues.
-  2. Si no, se genera una aleatoria y se imprime en los registros de arranque.
-     Funciona sin configurar nada, pero cambia en cada despliegue.
+Por qué la contraseña NO se escribe en el código: este repositorio es
+público. En modo demostración, si no hay ADMIN_PASSWORD se genera una y se
+anuncia en los registros de arranque.
 """
 
 from __future__ import annotations
@@ -41,7 +41,7 @@ def _generar_password() -> str:
 
 def _anunciar(correo: str, password: str | None, origen: str) -> None:
     linea = "=" * 68
-    logger.warning("\n%s", linea)
+    logger.warning("%s", linea)
     logger.warning("  MODO DEMOSTRACIÓN — sin Supabase, los datos viven en memoria")
     logger.warning("%s", linea)
     logger.warning("  Cuenta de administrador:")
@@ -52,22 +52,37 @@ def _anunciar(correo: str, password: str | None, origen: str) -> None:
         logger.warning("  %s", origen)
     else:
         logger.warning("      Contraseña : la que ya definiste (no se muestra)")
-    logger.warning("%s\n", linea)
+    logger.warning("%s", linea)
+
+
+def _avisar_si_es_debil(password: str) -> None:
+    """
+    Advierte, pero no bloquea. Bloquear aquí dejaba la aplicación sin ninguna
+    cuenta con la que entrar, y el síntoma era un fallo de acceso que no
+    apuntaba a la causa.
+    """
+    problemas = auth_service.validar_fortaleza(password)
+    if not problemas:
+        return
+    logger.warning(
+        "ADMIN_PASSWORD es débil (%s). La cuenta se crea igual, pero conviene "
+        "cambiarla: da acceso a todas las consolidaciones.",
+        "; ".join(problemas),
+    )
 
 
 async def asegurar_admin() -> None:
     """
-    Crea la cuenta de administrador si todavía no existe.
+    Garantiza que la cuenta de administración exista y responda a la
+    contraseña de las variables de entorno.
 
     Actúa en dos situaciones:
 
       · Modo demostración: siempre, para que la aplicación sea usable sin
         configurar nada.
-      · Con Supabase: solo si ADMIN_EMAIL y ADMIN_PASSWORD están en el
-        entorno. Es la vía para arrancar en Railway, donde no hay una
-        terminal a mano para ejecutar scripts/crear_admin.py.
-
-    Nunca sobrescribe una cuenta existente ni cambia su contraseña.
+      · Con Supabase: cuando ADMIN_EMAIL y ADMIN_PASSWORD están definidas.
+        Es la vía para administrar en Railway, donde no hay una terminal a
+        mano para ejecutar scripts/crear_admin.py.
     """
     demo = modo_demostracion()
     con_variables = bool(settings.ADMIN_EMAIL and settings.ADMIN_PASSWORD)
@@ -77,74 +92,77 @@ async def asegurar_admin() -> None:
 
     correo = (settings.ADMIN_EMAIL or CORREO_POR_DEFECTO).strip().lower()
 
-    try:
-        existente = await auth_service.get_user_by_email(correo)
-    except Exception as exc:
-        logger.error("No se pudo verificar la cuenta de administrador: %s", exc)
-        return
-
-    if existente:
-        if demo:
-            _anunciar(correo, None, "")
-        else:
-            logger.info("La cuenta de administrador %s ya existe.", correo)
-        return
-
+    # ── Qué contraseña debe quedar ──
     if settings.ADMIN_PASSWORD:
         password = settings.ADMIN_PASSWORD
         origen = "Definida en la variable de entorno ADMIN_PASSWORD."
-
-        # Si no cumple los requisitos, create_user la rechaza y la cuenta
-        # sencillamente no existe. Sin este aviso, el síntoma que ve la persona
-        # es un "correo o contraseña incorrectos" al intentar entrar, y nada
-        # apunta a que el problema está en una variable de entorno.
-        problemas = auth_service.validar_fortaleza(password)
-        if problemas:
-            linea = "=" * 68
-            logger.error("%s", linea)
-            logger.error("  NO SE CREÓ LA CUENTA DE ADMINISTRADOR")
-            logger.error("%s", linea)
-            logger.error("  ADMIN_PASSWORD no cumple los requisitos:")
-            for problema in problemas:
-                logger.error("      · %s", problema)
-            logger.error("")
-            logger.error("  Corrígela en las variables de entorno y vuelve a")
-            logger.error("  desplegar. Mientras tanto no hay ninguna cuenta y el")
-            logger.error("  acceso responderá 'correo o contraseña incorrectos'.")
-            logger.error("%s", linea)
-            return
-    elif not demo:
-        # Sin Supabase no pasa nada: en demostración se anuncia. Con base de
-        # datos real, generar una contraseña y escribirla en los registros
-        # sería dejarla expuesta en el panel de despliegue.
-        logger.warning(
-            "ADMIN_EMAIL está definido pero ADMIN_PASSWORD no. No se crea la "
-            "cuenta: define ambas o usa scripts/crear_admin.py."
-        )
-        return
-    else:
+        _avisar_si_es_debil(password)
+    elif demo:
         password = _generar_password()
         origen = (
             "Generada al arrancar. Cambiará en el próximo despliegue.\n"
             "  Para fijarla: define ADMIN_PASSWORD en las variables de entorno."
         )
+    else:
+        logger.warning(
+            "ADMIN_EMAIL está definido pero ADMIN_PASSWORD no. No se puede "
+            "preparar la cuenta: define ambas o usa scripts/crear_admin.py."
+        )
+        return
 
+    try:
+        existente = await auth_service.get_user_by_email(correo)
+    except Exception as exc:
+        logger.error("No se pudo consultar la cuenta de administración: %s", exc)
+        return
+
+    # ── La cuenta ya existe: se sincroniza con las variables ──
+    if existente:
+        try:
+            coincide = auth_service.verify_password(
+                password, existente.get("password_hash", "")
+            )
+            necesita_arreglo = (
+                not coincide
+                or not existente.get("activo", True)
+                or existente.get("rol") != "admin"
+            )
+
+            if necesita_arreglo:
+                await auth_service.fijar_password(existente["id"], password)
+                if existente.get("rol") != "admin":
+                    await auth_service.set_rol(existente["id"], "admin")
+                logger.warning(
+                    "Cuenta de administración %s sincronizada con las variables "
+                    "de entorno: contraseña, estado activo y rol admin.",
+                    correo,
+                )
+            else:
+                logger.info("Cuenta de administración %s lista.", correo)
+        except Exception as exc:
+            logger.error("No se pudo sincronizar la cuenta %s: %s", correo, exc)
+            return
+
+        if demo:
+            _anunciar(correo, password if settings.ADMIN_PASSWORD else password, origen)
+        return
+
+    # ── No existe: se crea ──
     try:
         usuario = await auth_service.create_user(
             email=correo,
-            nombre="Administrador de la demostración",
+            nombre="Administración",
             password=password,
             rol="admin",
+            exigir_fortaleza=False,
+            debe_cambiar_password=False,
         )
-        # No se le exige cambiarla: en demostración no hay a quién entregarla.
-        await auth_service.change_password(usuario["id"], password)
+        await auth_service.fijar_password(usuario["id"], password)
     except Exception as exc:
-        logger.error("No se pudo crear la cuenta de administrador: %s", exc)
+        logger.error("No se pudo crear la cuenta de administración: %s", exc)
         return
 
     if demo:
         _anunciar(correo, password, origen)
     else:
-        # Con base de datos real no se imprime la contraseña: el titular ya
-        # la conoce, porque la definió él en las variables de entorno.
-        logger.info("Cuenta de administrador creada: %s", correo)
+        logger.warning("Cuenta de administración creada: %s", correo)
