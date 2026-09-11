@@ -93,6 +93,26 @@ async def asegurar_admin() -> None:
     if settings.ADMIN_PASSWORD:
         password = settings.ADMIN_PASSWORD
         origen = "Definida en la variable de entorno ADMIN_PASSWORD."
+
+        # Si no cumple los requisitos, create_user la rechaza y la cuenta
+        # sencillamente no existe. Sin este aviso, el síntoma que ve la persona
+        # es un "correo o contraseña incorrectos" al intentar entrar, y nada
+        # apunta a que el problema está en una variable de entorno.
+        problemas = auth_service.validar_fortaleza(password)
+        if problemas:
+            linea = "=" * 68
+            logger.error("%s", linea)
+            logger.error("  NO SE CREÓ LA CUENTA DE ADMINISTRADOR")
+            logger.error("%s", linea)
+            logger.error("  ADMIN_PASSWORD no cumple los requisitos:")
+            for problema in problemas:
+                logger.error("      · %s", problema)
+            logger.error("")
+            logger.error("  Corrígela en las variables de entorno y vuelve a")
+            logger.error("  desplegar. Mientras tanto no hay ninguna cuenta y el")
+            logger.error("  acceso responderá 'correo o contraseña incorrectos'.")
+            logger.error("%s", linea)
+            return
     elif not demo:
         # Sin Supabase no pasa nada: en demostración se anuncia. Con base de
         # datos real, generar una contraseña y escribirla en los registros

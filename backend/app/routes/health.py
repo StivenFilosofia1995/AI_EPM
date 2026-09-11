@@ -17,6 +17,7 @@ from fastapi import APIRouter
 
 from app.config import settings
 from app.domain.tree_loader import TreeError, get_tree
+from app.services import auth_service
 from app.services.db import DatabaseUnavailable, get_client, rol_de_la_clave
 from app.services.schema_check import migraciones_pendientes, verificar_esquema
 
@@ -66,6 +67,16 @@ async def health():
     db = await _check_db()
     tree = _check_tree()
 
+    cuenta: dict = {"estado": "ok"}
+    if settings.ADMIN_PASSWORD:
+        problemas = auth_service.validar_fortaleza(settings.ADMIN_PASSWORD)
+        if problemas:
+            cuenta = {
+                "estado": "sin_crear",
+                "motivo": "ADMIN_PASSWORD no cumple los requisitos.",
+                "requisitos": problemas,
+            }
+
     rol = rol_de_la_clave()
     clave = {
         "rol_detectado": rol,
@@ -100,12 +111,14 @@ async def health():
         and tree["estado"] == "ok"
         and esquema["estado"] in ("ok", "desconocido")
         and clave["estado"] == "ok"
+        and cuenta["estado"] == "ok"
     )
 
     return {
         "status": "healthy" if critico_ok else "degraded",
         "base_datos": db,
         "clave_supabase": clave,
+        "cuenta_inicial": cuenta,
         "esquema": esquema,
         "arbol": tree,
         "modelo": modelo,
